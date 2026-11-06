@@ -1,0 +1,63 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { verifyAccessToken } from "./lib/jwt";
+
+const AUTH_COOKIE = "insight_access_token"; // keep in sync with lib/auth.ts
+
+// Routes that don't require a session. Everything else under /api and the
+// authenticated app shell is protected by default — a new route is secure
+// unless explicitly listed here, rather than the other way around.
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
+];
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+
+  const token = request.cookies.get(AUTH_COOKIE)?.value;
+  const claims = token ? await verifyAccessToken(token) : null;
+
+  if (!claims) {
+    // Expired access token but a refresh token is present: rotate it
+    // server-side and come straight back, instead of forcing a re-login.
+    if (!pathname.startsWith("/api/") && request.cookies.get("insight_refresh_token")?.value) {
+      const refreshUrl = new URL("/api/auth/refresh", request.url);
+      refreshUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(refreshUrl);
+    }
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Not authenticated. Please log in again." },
+        { status: 401 }
+      );
+    }
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Forward the verified claims to downstream handlers via request headers
+  // so route handlers don't need to re-verify the JWT on every call.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-insight-user-id", claims.sub);
+  requestHeaders.set("x-insight-business-id", claims.businessId);
+  requestHeaders.set("x-insight-role", claims.role);
+
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all routes except static assets and Next.js internals.
+     */
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
+};
