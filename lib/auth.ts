@@ -28,6 +28,8 @@ export type { SessionClaims } from "./jwt";
 // so a leaked database row can't be replayed as a live token.
 import { randomBytes, createHash } from "crypto";
 
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
 export function generateRefreshToken(): { token: string; hash: string; expiresAt: Date } {
   const token = randomBytes(48).toString("hex");
   const hash = createHash("sha256").update(token).digest("hex");
