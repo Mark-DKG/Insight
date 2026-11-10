@@ -1,5 +1,8 @@
 "use client";
 
+import { useAppNav } from "../lib/nav";
+import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
+
 import React, { useState, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -57,6 +60,7 @@ import {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
+  { key: "sales", label: "Sales", icon: HistoryIcon },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "products", label: "Products", icon: Package },
   { key: "purchases", label: "Purchases", icon: Truck },
@@ -67,6 +71,7 @@ const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: UserCog },
   { key: "advanced", label: "Advanced Features", icon: Sparkles },
   { key: "settings", label: "Settings", icon: Settings },
+  { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
 const SALES_TREND = [
@@ -123,6 +128,7 @@ export default function InsightDashboard() {
   const { dark, toggle } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("dashboard");
+  const navigate = useAppNav();
 
   // Live data: falls back to the sample figures below (kept as defaults)
   // until each request resolves, so the layout never flashes empty.
@@ -350,7 +356,8 @@ export default function InsightDashboard() {
             return (
               <button
                 key={item.key}
-                onClick={() => setActive(item.key)}
+                onClick={() => navigate(item.key)}
+                
                 title={collapsed ? item.label : undefined}
                 style={{
                   width: "100%",

@@ -1,6 +1,10 @@
 "use client";
 
+import { useAppNav } from "../lib/nav";
+import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
+
 import React, { useState, useMemo } from "react";
+import { buildReceiptFromSale, printReceipt, shareReceipt } from "../lib/receipt";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -38,6 +42,7 @@ import {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
+  { key: "sales", label: "Sales", icon: HistoryIcon },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "products", label: "Products", icon: Package },
   { key: "purchases", label: "Purchases", icon: Truck },
@@ -48,6 +53,7 @@ const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: UserCog },
   { key: "advanced", label: "Advanced Features", icon: Sparkles },
   { key: "settings", label: "Settings", icon: Settings },
+  { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
 const CATEGORIES = ["All", "Beverages", "Snacks", "Household", "Personal Care", "Dairy"];
@@ -84,6 +90,7 @@ export default function InsightPOS() {
   const [dark, setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
   const [active] = useState("pos");
+  const navigate = useAppNav();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
@@ -91,6 +98,8 @@ export default function InsightPOS() {
   const [discountPct, setDiscountPct] = useState(0);
   const [payment, setPayment] = useState("cash");
   const [completed, setCompleted] = useState(null);
+  const [receiptData, setReceiptData] = useState(null);
+  const [receiptNote, setReceiptNote] = useState("");
 
   // Live data from the API. Until it loads, the static PRODUCTS/CUSTOMERS
   // arrays above are shown so the screen is never blank.
@@ -279,6 +288,16 @@ export default function InsightPOS() {
         payment,
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
+      // Load the full server-side sale (cashier, branch, business details)
+      // so the printed/shared receipt matches the record exactly.
+      if (body.sale?.id) {
+        fetch(`/api/sales/${body.sale.id}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (d?.sale) setReceiptData(buildReceiptFromSale(d));
+          })
+          .catch(() => null);
+      }
       setCart([]);
       setDiscountPct(0);
       setCustomerId("");
@@ -338,6 +357,7 @@ export default function InsightPOS() {
             return (
               <div
                 key={item.key}
+                onClick={() => navigate(item.key)}
                 title={collapsed ? item.label : undefined}
                 style={{
                   display: "flex",
@@ -346,6 +366,7 @@ export default function InsightPOS() {
                   padding: collapsed ? "9px 0" : "9px 10px",
                   justifyContent: collapsed ? "center" : "flex-start",
                   marginBottom: 2,
+                  cursor: "pointer",
                   borderRadius: 6,
                   background: isActive ? theme.sidebarActive : "transparent",
                   color: isActive ? "#FFFFFF" : theme.sidebarText,
@@ -723,17 +744,31 @@ export default function InsightPOS() {
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                onClick={() => setCompleted(null)}
+                onClick={() => { setCompleted(null); setReceiptData(null); setReceiptNote(""); }}
                 style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
               >
                 New Sale
               </button>
               <button
-                style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: "none", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                disabled={!receiptData}
+                onClick={() => {
+                  if (!printReceipt(receiptData)) setReceiptNote("Allow pop-ups for this site to print.");
+                }}
+                style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: "none", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: receiptData ? "pointer" : "default", opacity: receiptData ? 1 : 0.6 }}
               >
                 Print Receipt
               </button>
+              <button
+                disabled={!receiptData}
+                onClick={() => shareReceipt(receiptData)}
+                style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontWeight: 600, fontSize: 13, cursor: receiptData ? "pointer" : "default", opacity: receiptData ? 1 : 0.6 }}
+              >
+                Share
+              </button>
             </div>
+            {receiptNote && (
+              <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 8, textAlign: "center" }}>{receiptNote}</div>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,9 @@
 "use client";
 
+import { useAppNav } from "../lib/nav";
+import ProductActions from "./product-actions";
+import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
+
 import React, { useState, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -38,6 +42,7 @@ import {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
+  { key: "sales", label: "Sales", icon: HistoryIcon },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "products", label: "Products", icon: Package },
   { key: "purchases", label: "Purchases", icon: Truck },
@@ -48,6 +53,7 @@ const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: UserCog },
   { key: "advanced", label: "Advanced Features", icon: Sparkles },
   { key: "settings", label: "Settings", icon: Settings },
+  { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
 const CATEGORIES = ["All Categories", "Beverages", "Snacks", "Household", "Personal Care", "Dairy"];
@@ -84,6 +90,7 @@ export default function InsightInventory() {
   const [dark, setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("inventory");
+  const navigate = useAppNav();
   const [tab, setTab] = useState("products"); // products | movements
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Categories");
@@ -364,7 +371,8 @@ export default function InsightInventory() {
             return (
               <button
                 key={item.key}
-                onClick={() => setActive(item.key)}
+                onClick={() => navigate(item.key)}
+                
                 title={collapsed ? item.label : undefined}
                 style={{
                   width: "100%",
@@ -781,18 +789,19 @@ export default function InsightInventory() {
             ))}
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: "none", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-            >
-              Edit Product
-            </button>
-            <button
-              style={{ flex: 1, padding: "9px 0", borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-            >
-              Adjust Stock
-            </button>
-          </div>
+          <ProductActions
+            product={selected}
+            session={session}
+            theme={theme}
+            onChanged={async () => {
+              if (session?.branchId) await loadProducts(session.branchId);
+              setSelected(null);
+            }}
+            onRemoved={async () => {
+              if (session?.branchId) await loadProducts(session.branchId);
+              setSelected(null);
+            }}
+          />
         </div>
       )}
 

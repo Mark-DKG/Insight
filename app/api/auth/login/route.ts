@@ -19,6 +19,13 @@ const LoginSchema = z.object({
 // email exists, to avoid leaking account presence to an attacker.
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect email or password.";
 
+// Brute-force protection: after MAX_FAILED_ATTEMPTS wrong passwords for an
+// account within LOCKOUT_WINDOW_MS, further attempts are refused until the
+// window passes. Counted from the audit log, so it holds across serverless
+// instances without needing extra infrastructure.
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = LoginSchema.safeParse(body);
@@ -34,8 +41,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
   }
 
+  const recentFailures = await prisma.auditLog.count({
+    where: {
+      userId: user.id,
+      action: "LOGIN_FAILED",
+      createdAt: { gte: new Date(Date.now() - LOCKOUT_WINDOW_MS) },
+    },
+  });
+  if (recentFailures >= MAX_FAILED_ATTEMPTS) {
+    return NextResponse.json(
+      { error: "Too many failed attempts. Please wait 15 minutes and try again." },
+      { status: 429 }
+    );
+  }
+
   const validPassword = await verifyPassword(password, user.passwordHash);
   if (!validPassword) {
+    await prisma.auditLog
+      .create({
+        data: { businessId: user.businessId, userId: user.id, action: "LOGIN_FAILED", entityType: "User", entityId: user.id },
+      })
+      .catch(() => null);
     return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
   }
 

@@ -1,5 +1,8 @@
 "use client";
 
+import { useAppNav } from "../lib/nav";
+import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
+
 import React, { useState, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -35,6 +38,7 @@ import {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
+  { key: "sales", label: "Sales", icon: HistoryIcon },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "products", label: "Products", icon: Package },
   { key: "purchases", label: "Purchases", icon: Truck },
@@ -45,6 +49,7 @@ const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: UserCog },
   { key: "advanced", label: "Advanced Features", icon: Sparkles },
   { key: "settings", label: "Settings", icon: Settings },
+  { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
 const PURCHASES = [
@@ -111,7 +116,11 @@ export default function InsightPurchases() {
   const [dark, setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("purchases");
+  const navigate = useAppNav();
   const [tab, setTab] = useState("purchases"); // purchases | suppliers
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "suppliers") setTab("suppliers");
+  }, []);
   const [query, setQuery] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState(SUPPLIERS[0].id);
 
@@ -481,6 +490,7 @@ export default function InsightPurchases() {
             return (
               <div
                 key={item.key}
+                onClick={() => navigate(item.key)}
                 title={collapsed ? item.label : undefined}
                 style={{
                   display: "flex",
@@ -489,6 +499,7 @@ export default function InsightPurchases() {
                   padding: collapsed ? "10px 0" : "10px 12px",
                   justifyContent: collapsed ? "center" : "flex-start",
                   marginBottom: 2,
+                  cursor: "pointer",
                   borderRadius: 6,
                   background: isActive ? theme.sidebarActive : "transparent",
                   color: isActive ? "#FFFFFF" : theme.sidebarText,

@@ -1,5 +1,8 @@
 "use client";
 
+import { useAppNav } from "../lib/nav";
+import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
+
 import React, { useState, useMemo } from "react";
 import {
   LayoutDashboard,
@@ -36,6 +39,7 @@ import {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
+  { key: "sales", label: "Sales", icon: HistoryIcon },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "products", label: "Products", icon: Package },
   { key: "purchases", label: "Purchases", icon: Truck },
@@ -46,6 +50,7 @@ const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: UserCog },
   { key: "advanced", label: "Advanced Features", icon: Sparkles },
   { key: "settings", label: "Settings", icon: SettingsIcon },
+  { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
 const SETTINGS_SECTIONS = [
@@ -93,6 +98,7 @@ export default function InsightSettings() {
   const [dark, setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("settings");
+  const navigate = useAppNav();
   const [section, setSection] = useState("business");
 
   const [liveUsers, setLiveUsers] = useState(null);
@@ -132,9 +138,52 @@ export default function InsightSettings() {
         if (body.user.business?.name) setBusinessName(body.user.business.name);
       })
       .catch(() => {});
+    fetch("/api/business")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        const b = body?.business;
+        if (!b) return;
+        setBusinessName(b.name ?? "");
+        setBizPhone(b.phone ?? "");
+        setBizEmail(b.email ?? "");
+        setBizAddress(b.address ?? "");
+        setTaxRate(String(Number(b.taxRate ?? 0)));
+        const match = ["GHS — Ghanaian Cedi", "NGN — Nigerian Naira", "USD — US Dollar"].find((c) => c.startsWith(b.currency));
+        if (match) setCurrency(match);
+      })
+      .catch(() => {});
   }, [loadUsers]);
 
   const usersToShow = liveUsers ?? USERS;
+
+  async function saveBusiness() {
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      const res = await fetch("/api/business", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: businessName,
+          phone: bizPhone || null,
+          email: bizEmail,
+          address: bizAddress || null,
+          currency: currency.slice(0, 3),
+          taxRate: Number(taxRate) || 0,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveStatus({ ok: false, text: body?.error ?? "Could not save your changes." });
+      } else {
+        setSaveStatus({ ok: true, text: "Changes saved." });
+      }
+    } catch {
+      setSaveStatus({ ok: false, text: "Couldn't reach the server. Nothing was saved." });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleInvite(e) {
     e.preventDefault();
@@ -172,6 +221,11 @@ export default function InsightSettings() {
 
   const [session, setSession] = useState(null);
   const [businessName, setBusinessName] = useState("");
+  const [bizPhone, setBizPhone] = useState("");
+  const [bizEmail, setBizEmail] = useState("");
+  const [bizAddress, setBizAddress] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // { ok: boolean, text: string }
   const [currency, setCurrency] = useState("GHS — Ghanaian Cedi");
   const [taxRate, setTaxRate] = useState("0");
 
@@ -222,13 +276,21 @@ export default function InsightSettings() {
     return { color: theme.textMuted, bg: dark ? "#1B2B25" : "#F3F5F4" };
   };
 
-  const SaveBar = () => (
-    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
-      <button style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 6, padding: "9px 18px", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-        <Check size={14} /> Save Changes
-      </button>
-    </div>
-  );
+  const SaveBar = ({ onSave }) =>
+    onSave ? (
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
+        {saveStatus && (
+          <span role="status" style={{ fontSize: 12.5, color: saveStatus.ok ? primary : bad }}>{saveStatus.text}</span>
+        )}
+        <button onClick={onSave} disabled={saving} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", borderRadius: 6, padding: "9px 18px", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
+          <Check size={14} /> {saving ? "Saving…" : "Save Changes"}
+        </button>
+      </div>
+    ) : (
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${theme.border}`, fontSize: 12, color: theme.textMuted }}>
+        These preferences apply to this session only and are not saved to your account yet.
+      </div>
+    );
 
   const Card = ({ children, style }) => (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, padding: 20, ...style }}>{children}</div>
@@ -264,9 +326,11 @@ export default function InsightSettings() {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (
-              <div key={item.key} title={collapsed ? item.label : undefined} style={{
+              <div key={item.key}
+                onClick={() => navigate(item.key)} title={collapsed ? item.label : undefined} style={{
                 display: "flex", alignItems: "center", gap: 12, padding: collapsed ? "10px 0" : "10px 12px",
-                justifyContent: collapsed ? "center" : "flex-start", marginBottom: 2, borderRadius: 6,
+                justifyContent: collapsed ? "center" : "flex-start", marginBottom: 2,
+                  cursor: "pointer", borderRadius: 6,
                 background: isActive ? theme.sidebarActive : "transparent", color: isActive ? "#FFFFFF" : theme.sidebarText,
                 fontSize: 13.5, fontWeight: isActive ? 600 : 500,
               }}>
@@ -332,16 +396,16 @@ export default function InsightSettings() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div style={fieldWrap}>
                     <label style={label}>Phone</label>
-                    <input style={inputStyle} placeholder="e.g. 030 220 4471" defaultValue="" />
+                    <input style={inputStyle} placeholder="e.g. 030 220 4471" value={bizPhone} onChange={(e) => setBizPhone(e.target.value)} />
                   </div>
                   <div style={fieldWrap}>
                     <label style={label}>Email</label>
-                    <input style={inputStyle} placeholder="e.g. hello@yourbusiness.com" defaultValue="" />
+                    <input style={inputStyle} placeholder="e.g. hello@yourbusiness.com" value={bizEmail} onChange={(e) => setBizEmail(e.target.value)} />
                   </div>
                 </div>
                 <div style={fieldWrap}>
                   <label style={label}>Address</label>
-                  <input style={inputStyle} placeholder="Street address" defaultValue="" />
+                  <input style={inputStyle} placeholder="Street address" value={bizAddress} onChange={(e) => setBizAddress(e.target.value)} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div style={fieldWrap}>
@@ -357,7 +421,7 @@ export default function InsightSettings() {
                     <input type="number" style={inputStyle} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
                   </div>
                 </div>
-                <SaveBar />
+                <SaveBar onSave={saveBusiness} />
               </Card>
             )}
 
