@@ -5,6 +5,8 @@ import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
 import { buildReceiptFromSale, printReceipt, shareReceipt } from "../lib/receipt";
+import { useOfflineSync, formatSyncStatus } from "../lib/offline/use-offline-sync";
+import { generateClientTxnId } from "../lib/offline/db";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -58,20 +60,6 @@ const NAV_ITEMS = [
 
 const CATEGORIES = ["All", "Beverages", "Snacks", "Household", "Personal Care", "Dairy"];
 
-const PRODUCTS = [
-  { id: "P-0002", name: "Malta Guinness 330ml", category: "Beverages", price: 6.5, qty: 142, unit: "Can" },
-  { id: "P-0003", name: "Milo 400g Tin", category: "Beverages", price: 38.0, qty: 0, unit: "Tin" },
-  { id: "P-0004", name: "Indomie Chicken 70g", category: "Snacks", price: 3.5, qty: 480, unit: "Pack" },
-  { id: "P-0005", name: "Fan Milk Yoghurt 500ml", category: "Dairy", price: 13.5, qty: 11, unit: "Bottle" },
-  { id: "P-0006", name: "Dettol Soap 100g", category: "Personal Care", price: 8.0, qty: 3, unit: "Bar" },
-  { id: "P-0007", name: "Peace Detergent Powder 1kg", category: "Household", price: 19.5, qty: 58, unit: "Bag" },
-  { id: "P-0008", name: "Coca-Cola 350ml", category: "Beverages", price: 5.0, qty: 210, unit: "Bottle" },
-  { id: "P-0001", name: "Sunlight Cooking Oil 2L", category: "Household", price: 32.0, qty: 6, unit: "Bottle" },
-  { id: "P-0009", name: "Pepsi 500ml", category: "Beverages", price: 5.5, qty: 96, unit: "Bottle" },
-  { id: "P-0010", name: "Digestive Biscuits", category: "Snacks", price: 7.0, qty: 64, unit: "Pack" },
-  { id: "P-0011", name: "Nivea Body Lotion 200ml", category: "Personal Care", price: 22.0, qty: 18, unit: "Bottle" },
-  { id: "P-0012", name: "Fresh Milk 1L", category: "Dairy", price: 15.0, qty: 27, unit: "Carton" },
-];
 
 const CUSTOMERS = ["Walk-in", "Linda Boateng", "Kwabena Asante", "Nana Adjei", "Efua Sarpong"];
 
@@ -85,6 +73,26 @@ const PAYMENT_METHODS = [
 
 const currency = (n) =>
   `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Last-known catalog, customers and session, so the POS can open and sell
+// without a connection. Stock figures from the cache are indicative only;
+// the server re-checks stock when queued sales sync.
+const POS_CACHE_KEY = "insight_pos_cache_v1";
+function readPosCache() {
+  try {
+    return JSON.parse(localStorage.getItem(POS_CACHE_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+function writePosCache(patch) {
+  try {
+    const current = readPosCache() || {};
+    localStorage.setItem(POS_CACHE_KEY, JSON.stringify({ ...current, ...patch, savedAt: new Date().toISOString() }));
+  } catch {
+    // Storage full or blocked: the POS still works online.
+  }
+}
 
 export default function InsightPOS() {
   const [dark, setDark] = useState(false);
@@ -102,7 +110,7 @@ export default function InsightPOS() {
   const [receiptData, setReceiptData] = useState(null);
   const [receiptNote, setReceiptNote] = useState("");
 
-  // Live data from the API. Until it loads, the static PRODUCTS/CUSTOMERS
+  // Live data from the API (or the device cache when offline). Until it loads, the
   // arrays above are shown so the screen is never blank.
   const [session, setSession] = useState(null);
   const [liveProducts, setLiveProducts] = useState(null);
@@ -110,20 +118,23 @@ export default function InsightPOS() {
   const [saleError, setSaleError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const offline = useOfflineSync();
+  const [usingCache, setUsingCache] = useState(false);
+
   const loadCatalog = React.useCallback(async (branchId) => {
     const res = await fetch("/api/products?pageSize=100");
-    if (!res.ok) return;
+    if (!res.ok) throw new Error("catalog");
     const body = await res.json();
-    setLiveProducts(
-      body.items.map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category?.name ?? "Uncategorized",
-        price: Number(p.sellingPrice),
-        qty: p.inventoryLevels?.find((l) => l.branchId === branchId)?.quantity ?? 0,
-        unit: p.unit,
-      }))
-    );
+    const items = body.items.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category?.name ?? "Uncategorized",
+      price: Number(p.sellingPrice),
+      qty: p.inventoryLevels?.find((l) => l.branchId === branchId)?.quantity ?? 0,
+      unit: p.unit,
+    }));
+    setLiveProducts(items);
+    writePosCache({ products: items });
   }, []);
 
   React.useEffect(() => {
@@ -131,10 +142,11 @@ export default function InsightPOS() {
     async function init() {
       try {
         const meRes = await fetch("/api/auth/me");
-        if (!meRes.ok) return;
+        if (!meRes.ok) throw new Error("session");
         const meBody = await meRes.json();
         if (cancelled) return;
         setSession(meBody.user);
+        writePosCache({ session: meBody.user });
 
         const [, custRes] = await Promise.all([
           loadCatalog(meBody.user.branchId),
@@ -143,9 +155,17 @@ export default function InsightPOS() {
         if (!cancelled && custRes.ok) {
           const custBody = await custRes.json();
           setLiveCustomers(custBody.customers);
+          writePosCache({ customers: custBody.customers });
         }
+        if (!cancelled) setUsingCache(false);
       } catch {
-        // Fall back silently to the static sample catalog below.
+        // Offline or server unreachable: fall back to the last-known data.
+        if (cancelled) return;
+        const cached = readPosCache();
+        if (cached?.session) setSession((s) => s ?? cached.session);
+        setLiveProducts((p) => p ?? cached?.products ?? []);
+        setLiveCustomers((c) => c ?? cached?.customers ?? []);
+        setUsingCache(true);
       }
     }
     init();
@@ -154,7 +174,7 @@ export default function InsightPOS() {
     };
   }, [loadCatalog]);
 
-  const activeProducts = liveProducts ?? PRODUCTS;
+  const activeProducts = liveProducts ?? [];
   const activeCustomers = liveCustomers ?? null; // null triggers the static name list in the dropdown
 
   const theme = useMemo(
@@ -254,41 +274,105 @@ export default function InsightPOS() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientTxnId:
-            typeof crypto !== "undefined" && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `txn-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-          branchId: session.branchId,
-          customerId: customerId || undefined,
-          paymentMethod: PAYMENT_ENUM[payment],
-          items: cart.map((i) => ({ productId: i.id, quantity: i.qty })),
-          discountPercent: discountPct,
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
+    const payload = {
+      clientTxnId: generateClientTxnId(),
+      branchId: session.branchId,
+      customerId: customerId || undefined,
+      paymentMethod: PAYMENT_ENUM[payment],
+      items: cart.map((i) => ({ productId: i.id, quantity: i.qty })),
+      discountPercent: discountPct,
+      occurredAt: new Date().toISOString(),
+    };
+    const localReceipt = {
+      id: null,
+      items: cart,
+      subtotal,
+      discount,
+      total,
+      customer: customerName,
+      payment,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
 
-      if (!res.ok) {
-        setSaleError(body?.error ?? "Sale could not be completed.");
-        setSubmitting(false);
-        return;
+    // Saves the sale to the device queue; the sync engine sends it (with the
+    // same clientTxnId, so it can never be recorded twice) when online.
+    const saveOffline = async () => {
+      if (payment === "credit") {
+        setSaleError("Credit sales need a connection so the customer's credit limit can be checked. Choose another payment method or try again when online.");
+        return false;
       }
-
-      setCompleted({
-        id: body.sale?.receiptNumber ?? `RCT-${Math.floor(10000 + Math.random() * 89999)}`,
-        items: cart,
+      await offline.queueSale(payload);
+      setCompleted({ ...localReceipt, id: `Pending sync (${payload.clientTxnId.slice(0, 8)})`, offline: true });
+      setReceiptData({
+        business: { name: session.business?.name, currency: session.business?.currency },
+        receiptNumber: `PENDING-${payload.clientTxnId.slice(0, 8).toUpperCase()}`,
+        date: payload.occurredAt,
+        branch: session.branch?.name ?? "",
+        cashier: session.name ?? "",
+        customer: customerName,
+        items: cart.map((i) => ({ name: i.name, qty: i.qty, unitPrice: i.price })),
         subtotal,
         discount,
         total,
-        customer: customerName,
-        payment,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        paymentMethod: payload.paymentMethod,
+        status: "COMPLETED",
       });
+      // Reflect the sale in the locally shown stock until the next refresh.
+      setLiveProducts((list) => {
+        const next = (list ?? []).map((p) => {
+          const line = cart.find((c) => c.id === p.id);
+          return line ? { ...p, qty: Math.max(0, p.qty - line.qty) } : p;
+        });
+        writePosCache({ products: next });
+        return next;
+      });
+      return true;
+    };
+
+    setSubmitting(true);
+    try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        if (await saveOffline()) {
+          setCart([]);
+          setDiscountPct(0);
+          setCustomerId("");
+        }
+        return;
+      }
+
+      let res;
+      try {
+        res = await fetch("/api/sales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        // The request never reached the server: keep the sale on this device.
+        if (await saveOffline()) {
+          setCart([]);
+          setDiscountPct(0);
+          setCustomerId("");
+        }
+        return;
+      }
+      if (res.status >= 500) {
+        // Server-side failure: the idempotent clientTxnId makes it safe to
+        // queue and retry; if the first attempt did land, the retry is a no-op.
+        if (await saveOffline()) {
+          setCart([]);
+          setDiscountPct(0);
+          setCustomerId("");
+        }
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaleError(body?.error ?? "Sale could not be completed.");
+        return;
+      }
+
+      setCompleted({ ...localReceipt, id: body.sale?.receiptNumber ?? "Recorded" });
       // Load the full server-side sale (cashier, branch, business details)
       // so the printed/shared receipt matches the record exactly.
       if (body.sale?.id) {
@@ -303,9 +387,9 @@ export default function InsightPOS() {
       setDiscountPct(0);
       setCustomerId("");
       // Stock just changed server-side — refresh so the grid reflects it.
-      loadCatalog(session.branchId);
+      loadCatalog(session.branchId).catch(() => null);
     } catch {
-      setSaleError("Couldn't reach the server. The sale was not recorded.");
+      setSaleError("The sale could not be saved on this device. Nothing was recorded; please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -396,7 +480,28 @@ export default function InsightPOS() {
             gap: 16,
           }}
         >
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Point of Sale</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Point of Sale</div>
+            <div
+              role="status"
+              aria-live="polite"
+              title={usingCache ? "Showing the last saved catalog" : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
+                color: offline.failed > 0 ? "#B3261E" : offline.phase === "offline" ? "#B7791F" : "#2E7D32",
+                background: offline.failed > 0 ? (dark ? "#3A1D1B" : "#FBE9E7") : offline.phase === "offline" ? (dark ? "#33291A" : "#FFF4E0") : (dark ? "#173C26" : "#E7F5EA"),
+              }}
+            >
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: "currentColor" }} />
+              {formatSyncStatus(offline)}
+              {offline.pending > 0 && offline.phase !== "offline" && offline.phase !== "syncing" ? ` · ${offline.pending} pending` : ""}
+            </div>
+            {offline.failed > 0 && (
+              <button onClick={() => offline.retryFailed()} style={{ fontSize: 11.5, fontWeight: 600, border: "1px solid #B3261E", color: "#B3261E", background: "transparent", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>
+                Retry
+              </button>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, maxWidth: 460 }}>
             <div
               style={{
@@ -713,7 +818,12 @@ export default function InsightPOS() {
           <div style={{ background: theme.surface, borderRadius: 10, width: 320, padding: 22, border: `1px solid ${theme.border}` }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 14 }}>
               <CheckCircle2 size={36} color={primary} />
-              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 8 }}>Sale Completed</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 8 }}>{completed.offline ? "Sale Saved Offline" : "Sale Completed"}</div>
+              {completed.offline && (
+                <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>
+                  Stored on this device and will sync automatically when the connection returns.
+                </div>
+              )}
               <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
                 {completed.id} · {completed.time}
               </div>

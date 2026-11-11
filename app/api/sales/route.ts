@@ -44,6 +44,9 @@ const CreateSaleSchema = z.object({
   items: z.array(SaleItemSchema).min(1, "A sale needs at least one item."),
   discountPercent: z.number().min(0).max(100).default(0),
   creditDueDate: z.string().datetime().optional(),
+  // When the sale happened on the device. Honoured for offline sales synced
+  // later (up to 7 days old, not in the future); otherwise the server time.
+  occurredAt: z.string().datetime().optional(),
 });
 
 export async function POST(request: Request) {
@@ -60,6 +63,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid sale data." }, { status: 400 });
   }
   const input = parsed.data;
+
+  let saleTimestamp: Date | null = null;
+  if (input.occurredAt) {
+    const t = new Date(input.occurredAt);
+    const now = Date.now();
+    if (t.getTime() <= now + 5 * 60 * 1000 && t.getTime() >= now - 7 * 24 * 60 * 60 * 1000) saleTimestamp = t;
+  }
 
   if (input.paymentMethod === "CREDIT" && !input.customerId) {
     return NextResponse.json({ error: "A credit sale must be linked to a customer." }, { status: 400 });
@@ -136,6 +146,7 @@ export async function POST(request: Request) {
           businessId: session.businessId,
           branchId: input.branchId,
           cashierId: session.sub,
+          ...(saleTimestamp ? { createdAt: saleTimestamp } : {}),
           customerId: input.customerId,
           receiptNumber,
           subtotal,

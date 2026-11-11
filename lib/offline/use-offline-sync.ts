@@ -5,6 +5,10 @@ import { putQueuedSale, generateClientTxnId } from "./db";
 import { syncEngine, type SyncState } from "./sync-engine";
 
 export interface SaleInput {
+  /** Pass the id the POS already generated; one is created if omitted. */
+  clientTxnId?: string;
+  /** When the sale actually happened (preserved through sync). */
+  occurredAt?: string;
   branchId: string;
   customerId?: string;
   paymentMethod: "CASH" | "MOBILE_MONEY" | "BANK_TRANSFER" | "CARD" | "CREDIT" | "OTHER";
@@ -36,12 +40,12 @@ export function useOfflineSync() {
   }, []);
 
   const queueSale = useCallback(async (sale: SaleInput) => {
-    const clientTxnId = generateClientTxnId();
-    const now = new Date().toISOString();
+    const clientTxnId = sale.clientTxnId ?? generateClientTxnId();
+    const now = sale.occurredAt ?? new Date().toISOString();
 
     await putQueuedSale({
       clientTxnId,
-      payload: { ...sale, clientTxnId },
+      payload: { ...sale, clientTxnId, occurredAt: now },
       status: "pending",
       attempts: 0,
       createdAt: now,

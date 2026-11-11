@@ -50,9 +50,21 @@ class SyncEngine {
     window.addEventListener("online", () => this.handleOnline());
     window.addEventListener("offline", () => this.handleOffline());
 
-    this.refreshCounts().then(() => {
-      if (navigator.onLine) this.processQueue();
-    });
+    // A sale left in "syncing" means the page closed mid-request. Its outcome
+    // is unknown, so put it back to pending: the server's clientTxnId check
+    // makes resending it safe (an already-recorded sale is not duplicated).
+    getQueuedSalesByStatus("syncing")
+      .then((stuck) => Promise.all(stuck.map((s) => putQueuedSale({ ...s, status: "pending" }))))
+      .catch(() => null)
+      .then(() => this.refreshCounts())
+      .then(() => {
+        if (navigator.onLine) this.processQueue();
+      });
+
+    // Periodic retry for transient failures while the page stays open.
+    window.setInterval(() => {
+      if (navigator.onLine && this.state.pending > 0) this.processQueue();
+    }, 60_000);
   }
 
   subscribe(listener: Listener): () => void {
@@ -195,6 +207,12 @@ class SyncEngine {
       // "already recorded" case from the API — either way the sale is
       // resolved and should leave the queue, but a genuine stock conflict
       // should still be surfaced so the business owner sees it happened.
+      // Expired session: not the sale's fault. Keep it pending; it syncs
+      // after the user signs in again (or the token refreshes).
+      if (response.status === 401) {
+        return { outcome: "transient", message: "Session expired — sign in again to finish syncing." };
+      }
+
       if (response.status === 409) {
         const body = await response.json().catch(() => ({}));
         if (body?.message === "Already recorded.") {
