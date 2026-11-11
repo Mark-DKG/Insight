@@ -34,7 +34,7 @@ export function CartBadge() {
   );
 }
 
-export function AddToCart({ listingId, available, disabled }) {
+export function AddToCart({ listingId, available, disabled = false }) {
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);

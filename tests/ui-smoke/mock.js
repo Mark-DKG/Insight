@@ -19,11 +19,21 @@ const routes = [...(window.__EXTRA_ROUTES || []),
   [/^\/api\/branches\/[^/]+$/, { branch: { id: "br1", name: "Main Branch" }, summary: { revenue: 0, grossProfit: 0, netProfit: 0, transactionCount: 0, expenses: 0, lowStockCount: 0, outOfStockCount: 0 } }],
   [/^\/api\/branches/, { branches: [{ id: "br1", name: "Main Branch", isMain: true, isActive: true }] }],
   [/^\/api\/inventory\/movements/, { movements: [] }],
+  // Notifications and Insight Store: a business that has never applied.
+  [/^\/api\/notifications\/read/, { updated: 0, unread: 0 }],
+  [/^\/api\/notifications/, { items: [], unread: 0, nextCursor: null }],
+  [/^\/api\/seller\/status/, { package: { mode: MODE, label: "Full", includesStore: MODE === "FULL" || MODE === "STORE_INVENTORY" }, pendingPackage: null, seller: null, canSell: false, blockedReason: "Your business has not been approved as an Insight Store seller yet.", application: null, history: [], requiredDocuments: [{ key: "registration", label: "Business registration certificate", required: false }], canApply: true }],
+  [/^\/api\/seller\/profile/, { error: "Your business has not been approved as an Insight Store seller yet.", code: "STORE_NOT_AVAILABLE" }, 403],
+  [/^\/api\/seller\//, { error: "Your business is not an approved Insight Store seller.", code: "STORE_NOT_AVAILABLE" }, 403],
+  [/^\/api\/store\/public\/categories/, { categories: [{ id: "c1", name: "Groceries", slug: "groceries" }, { id: "c2", name: "Fashion", slug: "fashion" }] }],
+  [/^\/api\/store\/public\/cart/, { lines: [], count: 0 }],
+  [/^\/api\/store\/public\/orders\//, { error: "Order not found. Use the link from your order confirmation." }, 404],
+  [/^\/api\/store\/public\/attribution/, { ok: true }],
 ];
 window.fetch = async (input) => {
   const url = typeof input === "string" ? input : input.url;
   const path = url.replace(/^https?:\/\/[^/]+/, "");
   const hit = routes.find(([re]) => re.test(path.split("?")[0]));
   console.log("[fetch] " + path + (hit ? "" : " (UNMOCKED)"));
-  return new Response(JSON.stringify(hit ? hit[1] : { error: "unmocked" }), { status: hit ? 200 : 404, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(hit ? hit[1] : { error: "unmocked" }), { status: hit ? hit[2] ?? 200 : 404, headers: { "Content-Type": "application/json" } });
 };

@@ -66,7 +66,7 @@ export async function applyOrderAction(opts: { orderId: string; businessId: stri
     if (to === "DISPATCHED" && order.fulfilment !== "DELIVERY") throw new OrderActionError("This order is for collection, not delivery.");
     if (to === "COMPLETED" && order.paymentStatus !== "PAID") throw new OrderActionError("Record the payment before completing the order.");
 
-    const data: Prisma.StoreOrderUpdateManyMutationInput = { status: to };
+    const data: Prisma.StoreOrderUncheckedUpdateManyInput = { status: to };
     let branchId = order.branchId;
 
     if (to === "CONFIRMED" && !order.stockDeducted) {

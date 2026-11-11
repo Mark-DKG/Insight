@@ -82,7 +82,7 @@ function StoreBody({ initialTab }) {
   );
 }
 
-export default function AdminStore({ initialTab }) {
+export default function AdminStore({ initialTab = undefined }) {
   return (
     <AdminShell active="/admin/store" title="Insight Store" subtitle="Marketplace sellers, listings and orders">
       <StoreBody initialTab={initialTab} />
