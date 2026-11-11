@@ -1,110 +1,64 @@
-# Deploying the Insight by 9DEVs demo
+# Deploying Insight by 9DEVs
 
-This is a real Next.js 14 (App Router) project — not a mockup — with a
-Postgres/Prisma backend, working auth, and the full UI wired into page
-routes. What follows gets it live in about 10 minutes.
+Production runs on **Vercel** (built from `main` on GitHub) with a **Neon PostgreSQL** database.
+Every push to `main` builds and, if the build passes, replaces the live deployment.
+A failed build never replaces the live site.
 
-## 1. What's in this build
+## Environment variables (Vercel → Settings → Environment Variables)
 
-- `app/` — page routes (`/login`, `/register`, `/dashboard`, `/pos`,
-  `/inventory`, `/purchases`, `/customers`, `/expenses`, `/reports`,
-  `/advanced`, `/settings`) and the API routes under `app/api/`
-- `components/` — the screen UI, each a client component
-- `lib/` — auth, RBAC, tenant scoping, Prisma client, offline sync engine
-- `prisma/schema.prisma` (see the schema you already have) + `prisma/seed.ts`
-  — realistic demo data for "Riverside Mart"
-- `middleware.ts` — route protection
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Pooled Postgres connection string (`?sslmode=require`). |
+| `JWT_SIGNING_SECRET` | Long random string, e.g. `openssl rand -base64 48`. Rotating it signs everyone out. |
 
-**Current state:** every screen is wired to the live `app/api/*` routes and
-starts empty. Create an account at `/register`; that account becomes the
-Owner of a new business. Optional demo data: `prisma/seed.ts`.
+Never commit real values. `.env.example` lists the names only.
 
-## 2. Get a Postgres database
+## Build
 
-Pick one (all have a free tier that's enough for a demo):
+`npm run build` runs `prisma generate && next build`. Generating the client on every build
+prevents Vercel's dependency cache from serving a Prisma client older than the schema.
 
-- **Neon** — neon.tech → New Project → copy the connection string
-- **Supabase** — supabase.com → New Project → Settings → Database →
-  connection string (use the "connection pooling" URI for serverless)
-- **Vercel Postgres** — from your Vercel project → Storage → Create
-  Database → Postgres
+## Database migrations
 
-You need a URL shaped like:
-`postgresql://user:password@host:5432/dbname?sslmode=require`
+Migrations live in `prisma/migrations/` and are committed:
 
-## 3. Configure environment variables
+| Migration | Change |
+|---|---|
+| `0_init` | Baseline schema (all core tables). |
+| `1_auth_attempts` | `AuthAttempt` table. |
+| `2_settings_receipts_resets` | `Business.receiptCounter`, `Business.settings`, `PasswordResetToken`. |
+| `3_app_mode` | `AppMode` enum and `Business.appMode` (default `FULL`). |
 
-Copy `.env.example` to `.env` locally:
+All four are recorded as applied on the production database. Migrations are additive and
+non-destructive.
+
+**Applying a new migration to production** (from a machine with `DATABASE_URL` pointing at production):
 
 ```bash
-cp .env.example .env
+npx prisma migrate deploy   # applies only migrations not yet recorded; never drops data
 ```
 
-Fill in:
-- `DATABASE_URL` — from step 2
-- `JWT_SIGNING_SECRET` — generate one with `openssl rand -base64 48`
+**Never** run `prisma migrate dev`, `prisma migrate reset` or `prisma db push` against production:
+`dev`/`reset` can drop and recreate the database. Use them only against a local or branch database.
 
-## 4. Install, migrate, seed (local check before deploying)
+`0_init`–`2` were reconstructed from the live database after they were applied, so their
+checksums differ from what `_prisma_migrations` recorded. `migrate deploy` does not re-check applied
+migrations, so this is harmless in production; on a fresh local database run `npx prisma migrate deploy`
+to build the schema from scratch.
+
+## Local development
 
 ```bash
-npm install
-npx prisma migrate dev --name init
-npm run prisma:seed
+cp .env.example .env          # fill in a local/branch DATABASE_URL and a JWT secret
+npm install                   # also runs prisma generate
+npx prisma migrate deploy     # create the schema
+npm run prisma:seed           # optional demo data — never run against production
 npm run dev
 ```
 
-Visit `http://localhost:3000` — it redirects to `/login`. Demo login:
+## First use in production
 
-```
-owner@riversidemart.demo
-Password123!
-```
-
-(printed at the end of the seed script, along with the other seeded users'
-emails if you want to log in as a cashier or manager instead — same password)
-
-## 5. Push to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Insight by 9DEVs demo"
-git branch -M main
-git remote add origin <your-empty-github-repo-url>
-git push -u origin main
-```
-
-## 6. Deploy to Vercel
-
-1. vercel.com → Add New Project → import the GitHub repo
-2. Framework preset: Next.js (auto-detected)
-3. Add environment variables (same two as `.env`): `DATABASE_URL`,
-   `JWT_SIGNING_SECRET`
-4. Deploy
-
-`postinstall` in `package.json` runs `prisma generate` automatically during
-Vercel's build, so you don't need a manual step for that.
-
-**Run the migration + seed against the production database** — Vercel
-doesn't do this for you:
-
-```bash
-# with DATABASE_URL pointed at production in your local .env
-npx prisma migrate deploy
-npm run prisma:seed
-```
-
-Then open the deployed URL — same demo login as above.
-
-## 7. If something doesn't build
-
-- **"Can't reach database server"** — check the connection string has
-  `?sslmode=require` for Neon/Supabase, and that you used the *pooled*
-  connection string if your host distinguishes pooled vs. direct (Vercel's
-  serverless functions need pooled).
-- **Prisma Client not generated** — confirm `postinstall` ran; if a build
-  cache is stale, redeploy with "Clear Build Cache" in Vercel.
-- **Login fails after seeding** — reseeding re-runs `main()` and will
-  error on duplicate unique emails/SKUs if run twice against the same
-  database. Reset with `npx prisma migrate reset` (drops and reseeds) if
-  you need a clean slate.
+1. Open `/register` and create the business owner account.
+2. Owners invite staff from **Settings → Users & Roles**.
+3. Choose **Settings → Application Mode** (Full Functionality or Inventory Only).
+4. Turn off Vercel Authentication (Settings → Deployment Protection) so customers can reach the site.

@@ -97,3 +97,38 @@ Key route groups:
 - **Database**: a Neon Postgres project, schema applied via a tested migration (verified on a temporary branch before touching production).
 - **Hosting**: deployed to Vercel; `postinstall: prisma generate` runs automatically on every build.
 - **Environment variables**: `DATABASE_URL` (Neon connection string), `JWT_SIGNING_SECRET` (signs/verifies access tokens) — both set in Vercel's project settings, never committed to the repo.
+
+## Application modes (Full Functionality / Inventory Only)
+
+Each business has one mode, `Business.appMode` (`FULL` default, `INVENTORY_ONLY`).
+
+- **Server enforcement — `lib/features.ts`.** `moduleGate(session, module)` reads the caller's
+  business mode and returns `403 { code: "MODULE_DISABLED" }` for a disabled module. It runs after
+  the role-permission check in every route of a gated module, so mode gating is independent of RBAC
+  and tenant scoping. Disabled in Inventory Only: `pos` (POST /api/sales), `sales` (sales list,
+  detail, void/refund), `customers` (customers, statements, credit payments), `expenses`,
+  `finance` (GET /api/reports/profit), `shifts` (cashier shifts).
+- **Switching — `PUT /api/business/mode`.** Requires `settings.manage_application_mode` (Owner only),
+  an explicit `confirm: true`, runs in a transaction, and writes an `APP_MODE_CHANGED` audit log
+  with business, user, previous and new mode. A failed update returns an error, never a success.
+- **Interface — `lib/nav.js`.** `useAppMode(pageKey)` loads the mode once per page load, hides
+  disabled sidebar items (`visibleNav`), redirects disabled pages to `/inventory`, maps Dashboard to
+  Inventory and Employees to Settings → Users. Reports shows only the Inventory report.
+- **Data is never deleted.** Restoring Full Functionality makes all records available again.
+
+## Offline POS (current behaviour)
+
+- The POS caches the catalog, customers and session in `localStorage` after each successful load,
+  and falls back to it when offline.
+- A sale is posted directly when online. If the device is offline, the request fails to reach the
+  server, or the server returns 5xx, the sale is written to the IndexedDB queue
+  (`lib/offline/db.ts`) with the same `clientTxnId` and its `occurredAt` time.
+- `lib/offline/sync-engine.ts` sends queued sales oldest-first on reconnect, every 60 s while
+  pending, and on page load. `POST /api/sales` is idempotent on `(businessId, clientTxnId)`, so
+  resends never duplicate a sale. Sales stuck in `syncing` after a crash are reset to `pending`.
+  `401` is treated as transient; other `4xx` (e.g. insufficient stock) mark the sale `failed` with
+  the reason, visible in the POS status pill with a Retry action.
+- Supported offline: cash, mobile money, card, bank transfer and other sales. Not offline: credit
+  sales (need a live credit-limit check), voids/refunds, stock changes, purchasing.
+- `public/sw.js`: cache-first for `/_next/static`, network-first for pages with a cached fallback,
+  never intercepts `/api/*`. Registered in production by `components/sw-register.tsx`.
