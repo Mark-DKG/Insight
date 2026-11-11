@@ -99,8 +99,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all routes except static assets and Next.js internals.
+     * Match all routes except Next.js internals and files served from
+     * public/. Anything under public/ is a static asset with no session to
+     * check, and running the auth gate over it redirects it to /login — which
+     * silently breaks the logo, the product images and service worker
+     * registration for signed-out visitors. New public/ folders must be added
+     * here too.
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|brand/|products/).*)",
   ],
 };
