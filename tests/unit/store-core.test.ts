@@ -32,6 +32,7 @@ test("unpublished approved listing can be republished without review", () => ass
 test("editing published content returns it to draft", () => { assert.equal(statusAfterContentEdit("PUBLISHED"), "DRAFT"); assert.equal(statusAfterContentEdit("UNPUBLISHED"), "DRAFT"); assert.equal(statusAfterContentEdit("SUBMITTED"), "SUBMITTED"); });
 
 console.log("Orders");
+test("confirmed order can go straight to ready/dispatched (pay on collection/delivery)", () => { assert.ok(canTransitionOrder("CONFIRMED", "READY_FOR_COLLECTION")); assert.ok(canTransitionOrder("CONFIRMED", "DISPATCHED")); assert.ok(!canTransitionOrder("CONFIRMED", "COMPLETED")); });
 test("new request can be confirmed or rejected", () => { assert.ok(canTransitionOrder("NEW", "CONFIRMED")); assert.ok(canTransitionOrder("NEW", "REJECTED")); });
 test("cannot jump from new to completed or paid", () => { assert.equal(canTransitionOrder("NEW", "COMPLETED"), false); assert.equal(canTransitionOrder("NEW", "PAID"), false); });
 test("terminal states have no exits", () => { for (const s of ["COMPLETED", "REJECTED", "CANCELLED", "EXPIRED"] as const) assert.deepEqual(ORDER_TRANSITIONS[s], []); });

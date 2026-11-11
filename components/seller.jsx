@@ -49,7 +49,7 @@ const ORDER_STATUS = {
 // Mirrors ORDER_TRANSITIONS in lib/store/core.ts (the server enforces it).
 const NEXT = {
   NEW: ["confirm", "reject"],
-  CONFIRMED: ["awaiting_payment", "record_payment", "processing", "cancel"],
+  CONFIRMED: ["awaiting_payment", "record_payment", "processing", "ready", "dispatch", "cancel"],
   AWAITING_PAYMENT: ["record_payment", "cancel"],
   PAID: ["processing", "ready", "dispatch", "complete", "cancel"],
   PROCESSING: ["ready", "dispatch", "complete", "record_payment", "cancel"],

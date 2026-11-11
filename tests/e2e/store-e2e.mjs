@@ -382,6 +382,22 @@ async function main() {
   const vis = await A.patch(`/api/seller/listings/${listingB}`, { isVisible: false });
   check("B: listing not editable by A (and visibility toggle stays live)", vis.status === 404, vis.status);
 
+  // ---- Expiry of unanswered requests (needs direct DB access to backdate) ---------------------
+  const g4 = new Client("guest4");
+  await g4.post("/api/store/public/cart", { listingId: listingB, quantity: 1 });
+  const co4 = await g4.post("/api/store/public/checkout", { idempotencyKey: `e2e-${RUN}-checkout-0004`, customerName: "Yaw", customerPhone: "0550000000", fulfilment: { [bId]: "COLLECTION" } });
+  const { PrismaClient } = await import("@prisma/client");
+  const db = new PrismaClient();
+  await db.storeOrder.update({ where: { reference: co4.data.orders[0].reference }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+  await db.$disconnect();
+  const bOrders = await B.get("/api/seller/orders?status=EXPIRED");
+  const o4 = (bOrders.data?.orders ?? []).find((o) => o.reference === co4.data.orders[0].reference);
+  check("unanswered request expires after the deadline", !!o4, bOrders.data);
+  const late = await B.post(`/api/seller/orders/${o4?.id}/action`, { action: "confirm" });
+  check("expired request cannot be confirmed", late.status === 409, late.data);
+  const c4 = await g4.get(co4.data.orders[0].statusPath.replace("/store/orders/", "/api/store/public/orders/"));
+  check("customer sees the request expired", c4.data?.order?.status === "EXPIRED", c4.data?.order?.status);
+
   // Non-owner cannot change package
   // (registration creates only an owner; RBAC for MANAGER/CASHIER is enforced by requirePermission)
 

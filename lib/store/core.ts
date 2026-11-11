@@ -73,7 +73,9 @@ export type OrderStatus =
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   NEW: ["CONFIRMED", "REJECTED", "CANCELLED", "EXPIRED"],
-  CONFIRMED: ["AWAITING_PAYMENT", "PAID", "PROCESSING", "CANCELLED"],
+  // Pay-on-collection / pay-on-delivery is common: a confirmed order can move
+  // to ready/dispatched before payment. Completion still requires payment.
+  CONFIRMED: ["AWAITING_PAYMENT", "PAID", "PROCESSING", "READY_FOR_COLLECTION", "DISPATCHED", "CANCELLED"],
   AWAITING_PAYMENT: ["PAID", "CANCELLED"],
   PAID: ["PROCESSING", "READY_FOR_COLLECTION", "DISPATCHED", "COMPLETED", "CANCELLED"],
   PROCESSING: ["READY_FOR_COLLECTION", "DISPATCHED", "COMPLETED", "CANCELLED"],
