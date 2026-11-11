@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: { default: "Insight Store", template: "%s · Insight Store" },
-  description: "Shop products from approved local businesses on Insight Store by 9DEVs. Order directly from sellers on WhatsApp.",
+  description: "Shop products from approved local businesses on Insight Store. Order directly from sellers on WhatsApp.",
 };
 
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +16,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
     <div className="st">
       <header className="st-head">
         <div className="st-wrap st-head-row">
-          <a href="/store" className="st-logo">Insight Store <small>by 9DEVs</small></a>
+          <a href="/store" className="st-logo"><img src="/brand/insight-logo-light.png" alt="Insight" />Store</a>
           <form className="st-search" action="/store/search" method="get" role="search">
             <input name="q" placeholder="Search products and sellers" aria-label="Search products and sellers" maxLength={100} />
             <button type="submit">Search</button>

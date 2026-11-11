@@ -5,7 +5,7 @@ import ServiceWorkerRegister from "@/components/sw-register";
 import ErrorListener from "@/components/error-listener";
 
 export const metadata: Metadata = {
-  title: "Insight by 9DEVs",
+  title: "Insight",
   description: "Inventory, sales, profit, and business intelligence for retail.",
 };
 

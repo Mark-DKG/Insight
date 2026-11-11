@@ -301,8 +301,7 @@ export default function InsightAdvanced() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", padding: "18px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           {!collapsed && (
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Insight</div>
-              <div style={{ fontSize: 10.5, color: "rgba(221,237,226,0.6)", marginTop: 1 }}>by 9DEVs</div>
+              <img src="/brand/insight-logo-light.png" alt="Insight" style={{ height: 30, width: "auto", display: "block" }} />
             </div>
           )}
           <button onClick={() => setCollapsed((c) => !c)} aria-label="Toggle navigation" style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", padding: 4, display: "flex" }}>

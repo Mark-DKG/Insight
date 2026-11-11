@@ -7,6 +7,10 @@ const AUTH_COOKIE = "insight_access_token"; // keep in sync with lib/auth.ts
 // authenticated app shell is protected by default — a new route is secure
 // unless explicitly listed here, rather than the other way around.
 const PUBLIC_PATHS = [
+  // Public marketing site. Exact match only: the list is compared with
+  // `pathname === p` or `pathname.startsWith(p + "/")`, so "/" never widens
+  // into a prefix that would expose the authenticated app.
+  "/",
   "/login",
   "/register",
   "/api/auth/login",

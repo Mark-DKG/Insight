@@ -358,8 +358,7 @@ export default function InsightInventory() {
         >
           {!collapsed && (
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.2 }}>Insight</div>
-              <div style={{ fontSize: 10.5, color: "rgba(221,237,226,0.6)", marginTop: 1 }}>by 9DEVs</div>
+              <img src="/brand/insight-logo-light.png" alt="Insight" style={{ height: 30, width: "auto", display: "block" }} />
             </div>
           )}
           <button
