@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // GET /api/sales — recent transactions list (dashboard, sales history page)
 export async function GET(request: Request) {
@@ -11,6 +12,8 @@ export async function GET(request: Request) {
   if (!requirePermission(session, "sales:read")) {
     return NextResponse.json({ error: "You don't have access to view sales." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "sales");
+  if (blocked) return blocked;
 
   const url = new URL(request.url);
   const limit = Math.min(100, Number(url.searchParams.get("limit") ?? "20"));
@@ -48,6 +51,8 @@ export async function POST(request: Request) {
   if (!requirePermission(session, "sales:create")) {
     return NextResponse.json({ error: "You don't have permission to record sales." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "pos");
+  if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
   const parsed = CreateSaleSchema.safeParse(body);

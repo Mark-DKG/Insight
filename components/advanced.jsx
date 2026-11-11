@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
@@ -184,6 +184,7 @@ export default function InsightAdvanced() {
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("advanced");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
   const [tab, setTab] = useState("health"); // health | assistant | forecasting
   const [session, setSession] = useState(null);
   const [messages, setMessages] = useState([
@@ -307,7 +308,7 @@ export default function InsightAdvanced() {
           </button>
         </div>
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (

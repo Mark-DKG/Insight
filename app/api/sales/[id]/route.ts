@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // GET /api/sales/[id] — full sale detail: everything a receipt needs.
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -9,6 +10,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if (!requirePermission(session, "sales:read")) {
     return NextResponse.json({ error: "You don't have access to view sales." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "sales");
+  if (blocked) return blocked;
 
   const sale = await prisma.sale.findFirst({
     where: { id: params.id, ...tenantScope(session) },

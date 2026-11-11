@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // GET /api/reports/profit?from=&to=&branchId=
 //
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
   if (!requirePermission(session, "reports:read")) {
     return NextResponse.json({ error: "You don't have access to view reports." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "finance");
+  if (blocked) return blocked;
 
   const url = new URL(request.url);
   const from = url.searchParams.get("from");

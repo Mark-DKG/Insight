@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // POST /api/employees/shifts/[id]/end
 //
@@ -22,6 +23,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!requirePermission(session, "employees:read")) {
     return NextResponse.json({ error: "You don't have access to shifts." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "shifts");
+  if (blocked) return blocked;
 
   const shift = await prisma.employeeShift.findFirst({
     where: { id: params.id, user: { businessId: session.businessId } },

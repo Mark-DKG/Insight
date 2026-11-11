@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -91,6 +91,7 @@ export default function InsightPOS() {
   const [collapsed, setCollapsed] = useState(true);
   const [active] = useState("pos");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
@@ -351,7 +352,7 @@ export default function InsightPOS() {
           </button>
         </div>
         <nav style={{ flex: 1, padding: "10px 6px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (

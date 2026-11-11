@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -129,6 +129,7 @@ export default function InsightDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("dashboard");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
 
   // Live data: falls back to the sample figures below (kept as defaults)
   // until each request resolves, so the layout never flashes empty.
@@ -350,7 +351,7 @@ export default function InsightDashboard() {
         </div>
 
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (

@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // POST /api/sales/[id]/reverse — void or fully refund a completed sale.
 // Financial records are never deleted (business rule #12): the sale stays,
@@ -33,6 +34,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       { status: 403 }
     );
   }
+  const blocked = await moduleGate(session, "sales");
+  if (blocked) return blocked;
 
   try {
     const result = await prisma.$transaction(async (tx) => {

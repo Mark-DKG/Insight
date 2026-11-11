@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // POST /api/customers/[id]/payments
 //
@@ -23,6 +24,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!requirePermission(session, "customers:write")) {
     return NextResponse.json({ error: "You don't have permission to record payments." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "customers");
+  if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
   const parsed = RecordPaymentSchema.safeParse(body);

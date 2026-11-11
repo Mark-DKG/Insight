@@ -32,7 +32,9 @@ export type Permission =
   | "reports:read"
   | "settings:read"
   | "settings:write"
-  | "branches:write";
+  | "branches:write"
+  // Switching Full Functionality <-> Inventory Only. Owner only.
+  | "settings.manage_application_mode";
 
 const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
   OWNER: [
@@ -47,6 +49,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "reports:read",
     "settings:read", "settings:write",
     "branches:write",
+    "settings.manage_application_mode",
   ],
   MANAGER: [
     "products:read", "products:write",

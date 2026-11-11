@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import ProductActions from "./product-actions";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
@@ -91,6 +91,11 @@ export default function InsightInventory() {
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("inventory");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
+  const [modeNotice, setModeNotice] = useState(false);
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("notice") === "inventory-only") setModeNotice(true);
+  }, []);
   const [tab, setTab] = useState("products"); // products | movements
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Categories");
@@ -365,7 +370,7 @@ export default function InsightInventory() {
         </div>
 
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (
@@ -448,6 +453,12 @@ export default function InsightInventory() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {modeNotice && appMode === "INVENTORY_ONLY" && (
+            <div role="status" style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 6, fontSize: 13, background: dark ? "#173C26" : "#E7F5EA", color: dark ? "#CFE3D6" : "#145A32", display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <span>That page isn't available in Inventory Only mode, so you've been brought to Inventory. An owner can switch modes in Settings.</span>
+              <button onClick={() => setModeNotice(false)} aria-label="Dismiss" style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}>×</button>
+            </div>
+          )}
           {/* Summary tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 18 }}>
             {[

@@ -17,7 +17,7 @@ export async function GET() {
       role: true,
       businessId: true,
       branchId: true,
-      business: { select: { name: true, currency: true, logoUrl: true } },
+      business: { select: { name: true, currency: true, logoUrl: true, appMode: true } },
       branch: { select: { name: true } },
     },
   });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // GET /api/employees/shifts?userId=&branchId=&active=true
 export async function GET(request: Request) {
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
   if (!requirePermission(session, "employees:read")) {
     return NextResponse.json({ error: "You don't have access to view shifts." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "shifts");
+  if (blocked) return blocked;
 
   const url = new URL(request.url);
   const userId = url.searchParams.get("userId") ?? undefined;
@@ -40,6 +43,8 @@ export async function POST(request: Request) {
   if (!requirePermission(session, "employees:read")) {
     return NextResponse.json({ error: "You don't have permission to start a shift." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "shifts");
+  if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
   const parsed = StartShiftSchema.safeParse(body);

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { buildReceiptFromSale, printReceipt, shareReceipt } from "../lib/receipt";
 import {
   LayoutDashboard, ShoppingCart, Boxes, Package, Truck, Users, Building2, Receipt, BarChart3,
@@ -36,6 +36,7 @@ export default function InsightSales() {
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("sales");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
 
   const [session, setSession] = useState(null);
   const [sales, setSales] = useState(null); // null = loading
@@ -175,7 +176,7 @@ export default function InsightSales() {
           </button>
         </div>
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (

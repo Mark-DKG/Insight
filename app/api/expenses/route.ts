@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 const EXPENSE_CATEGORIES = [
   "RENT", "UTILITIES", "TRANSPORT", "SALARIES", "MAINTENANCE", "MARKETING", "INTERNET", "OTHER",
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
   if (!requirePermission(session, "expenses:read")) {
     return NextResponse.json({ error: "You don't have access to view expenses." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "expenses");
+  if (blocked) return blocked;
 
   const url = new URL(request.url);
   const category = url.searchParams.get("category") ?? undefined;
@@ -55,6 +58,8 @@ export async function POST(request: Request) {
   if (!requirePermission(session, "expenses:write")) {
     return NextResponse.json({ error: "You don't have permission to record expenses." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "expenses");
+  if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
   const parsed = CreateExpenseSchema.safeParse(body);

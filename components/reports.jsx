@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -127,6 +127,10 @@ export default function InsightReports() {
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("reports");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
+  React.useEffect(() => {
+    if (appMode === "INVENTORY_ONLY") setReportTab("inventory");
+  }, [appMode]);
   const [reportTab, setReportTab] = useState("sales"); // sales | profit | inventory
   const [range, setRange] = useState("This Week");
 
@@ -350,7 +354,7 @@ export default function InsightReports() {
           </button>
         </div>
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (
@@ -418,7 +422,7 @@ export default function InsightReports() {
               { key: "sales", label: "Sales" },
               { key: "profit", label: "Profit" },
               { key: "inventory", label: "Inventory" },
-            ].map((t) => (
+            ].filter((t) => appMode !== "INVENTORY_ONLY" || t.key === "inventory").map((t) => (
               <button
                 key={t.key}
                 onClick={() => setReportTab(t.key)}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { moduleGate } from "@/lib/features";
 
 // GET /api/customers/[id]/statement — everything the Customers screen's
 // statement panel needs in one call: credit accounts, their payments, and
@@ -11,6 +12,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if (!requirePermission(session, "customers:read")) {
     return NextResponse.json({ error: "You don't have access to view this customer." }, { status: 403 });
   }
+  const blocked = await moduleGate(session, "customers");
+  if (blocked) return blocked;
 
   const customer = await prisma.customer.findFirst({
     where: { id: params.id, ...tenantScope(session) },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAppNav } from "../lib/nav";
+import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -104,6 +104,7 @@ export default function InsightExpensesEmployees() {
   const [collapsed, setCollapsed] = useState(false);
   const [active] = useState("expenses");
   const navigate = useAppNav();
+  const appMode = useAppMode(active);
   const [tab, setTab] = useState("expenses"); // expenses | employees
   React.useEffect(() => {
     if (new URLSearchParams(window.location.search).get("tab") === "employees") setTab("employees");
@@ -400,7 +401,7 @@ export default function InsightExpensesEmployees() {
           </button>
         </div>
         <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          {NAV_ITEMS.map((item) => {
+          {visibleNav(NAV_ITEMS, appMode).map((item) => {
             const Icon = item.icon;
             const isActive = active === item.key;
             return (

@@ -147,6 +147,7 @@ model User {
   shifts        EmployeeShift[]
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([businessId])
   @@index([branchId])
@@ -586,4 +587,33 @@ model BusinessInsight {
 
   @@index([businessId])
   @@index([category])
+}
+
+// ----------------------------------------------------------------------------
+// Auth support tables (already present in the database from migrations
+// 1_auth_attempts and 2_settings_receipts_resets).
+// ----------------------------------------------------------------------------
+
+// One row per failed/attempted auth action, keyed by e.g. "login:<email>".
+model AuthAttempt {
+  id        String   @id @default(uuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
+}
+
+// Single-use password reset tokens; only the hash is stored.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
