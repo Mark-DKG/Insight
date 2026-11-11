@@ -9,6 +9,7 @@ export const Cell=Box;
 export const ComposedChart=Box;
 export const Legend=Box;
 export const Line=Box;
+export const LineChart=Box;
 export const Pie=Box;
 export const PieChart=Box;
 export const ResponsiveContainer=Box;

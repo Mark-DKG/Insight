@@ -21,7 +21,7 @@ export default function AuthFetch() {
       const res = await original(input, init);
       const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
       const path = url.startsWith("http") ? new URL(url).pathname : url;
-      if (res.status !== 401 || !path.startsWith("/api/") || path.startsWith("/api/auth/")) return res;
+      if (res.status !== 401 || !path.startsWith("/api/") || path.startsWith("/api/auth/") || path.startsWith("/api/admin/")) return res;
       if (init?.body && typeof init.body !== "string") return res; // can't safely replay streams
       return (await refresh()) ? original(input, init) : res;
     };

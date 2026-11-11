@@ -92,6 +92,19 @@ enum NotificationType {
 // Tenant root
 // ----------------------------------------------------------------------------
 
+enum BusinessStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  PLATFORM_ADMIN
+  TECHNICAL_ADMIN
+  SUPPORT_ADMIN
+  ANALYST
+}
+
 enum AppMode {
   FULL
   INVENTORY_ONLY
@@ -115,6 +128,11 @@ model Business {
   // software. Disabled modules are enforced server-side in lib/features.ts;
   // their records are never deleted.
   appMode       AppMode  @default(FULL)
+  // Platform-level account status, set by 9DEVs administrators. Suspension
+  // blocks sign-in and token refresh; it never deletes business records.
+  status          BusinessStatus @default(ACTIVE)
+  suspendedAt     DateTime?
+  suspendedReason String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -134,6 +152,8 @@ model Business {
   inventoryMovements InventoryMovement[]
 
   @@index([name])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ----------------------------------------------------------------------------
@@ -629,4 +649,69 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// Platform administration (9DEVs operators) — separate from business users.
+// See lib/admin/* and migration 4_platform_admin.
+// ----------------------------------------------------------------------------
+
+model PlatformAdmin {
+  id                 String       @id @default(uuid())
+  email              String       @unique
+  name               String
+  passwordHash       String
+  role               PlatformRole
+  // Permissions granted on top of the role's defaults (lib/admin/permissions.ts).
+  extraPermissions   String[]     @default([])
+  isActive           Boolean      @default(true)
+  // TOTP secret, AES-256-GCM encrypted with PLATFORM_ADMIN_SECRET.
+  mfaSecret          String?
+  mfaEnabled         Boolean      @default(false)
+  mustChangePassword Boolean      @default(true)
+  lastLoginAt        DateTime?
+  createdById        String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @default(now()) @updatedAt
+
+  sessions PlatformAdminSession[]
+}
+
+model PlatformAdminSession {
+  id         String    @id @default(uuid())
+  adminId    String
+  tokenHash  String    @unique
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  admin PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}
+
+// Append-only: a database trigger rejects UPDATE, DELETE and TRUNCATE.
+model PlatformAuditLog {
+  id               String   @id @default(uuid())
+  actorId          String?
+  actorEmail       String?
+  actorRole        String?
+  action           String
+  targetBusinessId String?
+  targetType       String?
+  targetId         String?
+  reason           String?
+  before           Json?
+  after            Json?
+  ip               String?
+  requestId        String?
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetBusinessId])
+  @@index([actorId])
+  @@index([action, createdAt])
 }

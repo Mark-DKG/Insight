@@ -27,10 +27,16 @@ async function rotate(): Promise<{ ok: false; clear: boolean; error: string } | 
 
   const stored = await prisma.refreshToken.findUnique({
     where: { tokenHash: presentedHash },
-    include: { user: true },
+    include: { user: { include: { business: { select: { status: true } } } } },
   });
 
-  if (!stored || stored.revokedAt || stored.expiresAt < new Date() || !stored.user.isActive) {
+  if (
+    !stored ||
+    stored.revokedAt ||
+    stored.expiresAt < new Date() ||
+    !stored.user.isActive ||
+    stored.user.business.status === "SUSPENDED"
+  ) {
     return { ok: false, clear: true, error: "Session expired. Please log in again." };
   }
 

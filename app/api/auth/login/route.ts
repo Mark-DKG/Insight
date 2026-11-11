@@ -36,7 +36,10 @@ export async function POST(request: Request) {
 
   const { email, password } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { business: { select: { status: true } } },
+  });
   if (!user || !user.isActive) {
     return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
   }
@@ -63,6 +66,13 @@ export async function POST(request: Request) {
       })
       .catch(() => null);
     return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
+  }
+
+  if (user.business.status === "SUSPENDED") {
+    return NextResponse.json(
+      { error: "This business account has been suspended. Contact 9DEVs support." },
+      { status: 403 }
+    );
   }
 
   const accessToken = await signAccessToken({

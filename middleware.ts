@@ -16,8 +16,28 @@ const PUBLIC_PATHS = [
   "/api/client-errors",
 ];
 
+// Platform admin area: completely separate auth (lib/admin/session.ts).
+// Middleware only checks that an admin session cookie is present so
+// unauthenticated visitors are sent to /admin/login; every admin API route
+// validates the session against the database and checks permissions itself.
+const ADMIN_PUBLIC = ["/admin/login", "/api/admin/auth/login", "/api/admin/auth/mfa"];
+const ADMIN_COOKIE = "insight_admin_session";
+
+function handleAdmin(request: NextRequest, pathname: string) {
+  if (ADMIN_PUBLIC.some((p) => pathname === p)) return NextResponse.next();
+  if (request.cookies.get(ADMIN_COOKIE)?.value) return NextResponse.next();
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Admin sign-in required." }, { status: 401 });
+  }
+  return NextResponse.redirect(new URL("/admin/login", request.url));
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/")) {
+    return handleAdmin(request, pathname);
+  }
 
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return NextResponse.next();

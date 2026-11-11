@@ -10,6 +10,7 @@ A failed build never replaces the live site.
 |---|---|
 | `DATABASE_URL` | Pooled Postgres connection string (`?sslmode=require`). |
 | `JWT_SIGNING_SECRET` | Long random string, e.g. `openssl rand -base64 48`. Rotating it signs everyone out. |
+| `PLATFORM_ADMIN_SECRET` | Admin console secret, at least 32 random characters. Rotating it forces administrators to re-enrol MFA. |
 
 Never commit real values. `.env.example` lists the names only.
 
@@ -28,8 +29,9 @@ Migrations live in `prisma/migrations/` and are committed:
 | `1_auth_attempts` | `AuthAttempt` table. |
 | `2_settings_receipts_resets` | `Business.receiptCounter`, `Business.settings`, `PasswordResetToken`. |
 | `3_app_mode` | `AppMode` enum and `Business.appMode` (default `FULL`). |
+| `4_platform_admin` | `PlatformAdmin`, `PlatformAdminSession`, append-only `PlatformAuditLog` (DB trigger), `Business.status`. |
 
-All four are recorded as applied on the production database. Migrations are additive and
+All five are recorded as applied on the production database. Migrations are additive and
 non-destructive.
 
 **Applying a new migration to production** (from a machine with `DATABASE_URL` pointing at production):
@@ -62,3 +64,30 @@ npm run dev
 2. Owners invite staff from **Settings → Users & Roles**.
 3. Choose **Settings → Application Mode** (Full Functionality or Inventory Only).
 4. Turn off Vercel Authentication (Settings → Deployment Protection) so customers can reach the site.
+
+## Platform admin console (`/admin`)
+
+### Creating the first Super Admin
+
+There is no sign-up page for administrators. The first Super Admin is created
+from a machine with database access:
+
+```bash
+DATABASE_URL="<production connection string>" \
+SUPER_ADMIN_EMAIL="you@example.com" SUPER_ADMIN_NAME="Your Name" \
+npx tsx scripts/create-super-admin.ts
+```
+
+- It prints a temporary password once (or uses `SUPER_ADMIN_PASSWORD` if set, 12+ characters).
+- It refuses to run if a Super Admin already exists. Later administrators are appointed inside the console (milestone 2).
+- First sign-in at `/admin/login`: enrol an authenticator app (mandatory), then set a new password.
+
+### Recovery (lost phone or password)
+
+```bash
+DATABASE_URL="<production connection string>" ADMIN_EMAIL="you@example.com" npx tsx scripts/reset-admin-access.ts
+```
+
+This prints a new temporary password, clears MFA so it must be re-enrolled, revokes the admin's
+sessions and writes an audit record. It needs database credentials, so there is no web route that
+could act as a backdoor.

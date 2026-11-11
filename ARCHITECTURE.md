@@ -132,3 +132,24 @@ Each business has one mode, `Business.appMode` (`FULL` default, `INVENTORY_ONLY`
   sales (need a live credit-limit check), voids/refunds, stock changes, purchasing.
 - `public/sw.js`: cache-first for `/_next/static`, network-first for pages with a cached fallback,
   never intercepts `/api/*`. Registered in production by `components/sw-register.tsx`.
+
+## Platform admin console (milestone 1)
+
+- **Separate identity.** `PlatformAdmin` is its own table; business users and Owners can never
+  satisfy an admin check. Roles: Super Admin, Platform Admin, Technical Admin, Support Admin,
+  Analyst. Every API checks a granular permission (`lib/admin/permissions.ts`), not a role name.
+  `administrators.manage` is reserved for Super Admins regardless of stored grants.
+- **Sign-in.** Password, then a TOTP code (RFC 6238, `lib/admin/totp.ts`). MFA is mandatory for all
+  admins and enrolled on first sign-in. TOTP secrets are AES-256-GCM encrypted with
+  `PLATFORM_ADMIN_SECRET`. Temporary passwords must be changed before any other admin API works.
+- **Sessions.** Opaque random token in the `insight_admin_session` cookie (httpOnly, SameSite=Strict);
+  only its SHA-256 hash is stored in `PlatformAdminSession`. 8 h absolute and 60 min idle limits.
+  Checked against the database on every request, so revocation is immediate.
+- **Rate limiting.** 5 failed passwords per email, or 5 failed codes per admin, in 15 minutes → 429.
+- **Authorization.** `requireAdmin(permission)` in `lib/admin/session.ts` runs at the top of every
+  `/api/admin/*` handler. Middleware only redirects visitors without an admin cookie to `/admin/login`.
+- **Audit.** `PlatformAuditLog` is append-only, enforced by a Postgres trigger that rejects
+  UPDATE/DELETE/TRUNCATE. It records actor, role, action, target, reason, before/after, IP and
+  Vercel request ID. Admin changes to a business are also written to that business's own `AuditLog`.
+- **Suspension.** `Business.status = SUSPENDED` blocks login and token refresh and revokes refresh
+  tokens. Open access tokens lapse within 15 minutes. No records are deleted.
