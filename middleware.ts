@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",
+  // Crash reports must get through even when the session has expired.
+  "/api/client-errors",
 ];
 
 export async function middleware(request: NextRequest) {
