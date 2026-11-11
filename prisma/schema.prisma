@@ -86,6 +86,11 @@ enum NotificationType {
   SYNC_ERROR
   TRANSACTION_FAILED
   GENERAL
+  SALES_ACTIVITY
+  STORE_APPLICATION
+  STORE_LISTING
+  STORE_ORDER
+  STORE_SELLER
 }
 
 // ----------------------------------------------------------------------------
@@ -105,9 +110,12 @@ enum PlatformRole {
   ANALYST
 }
 
+// Business operating packages. Enforced server-side in lib/features.ts.
 enum AppMode {
   FULL
   INVENTORY_ONLY
+  STORE_INVENTORY
+  POS_INVENTORY
 }
 
 model Business {
@@ -130,6 +138,8 @@ model Business {
   appMode       AppMode  @default(FULL)
   // Platform-level account status, set by 9DEVs administrators. Suspension
   // blocks sign-in and token refresh; it never deletes business records.
+  // Package requested but waiting on Insight Store seller approval.
+  pendingAppMode  AppMode?
   status          BusinessStatus @default(ACTIVE)
   suspendedAt     DateTime?
   suspendedReason String?
@@ -150,6 +160,10 @@ model Business {
   notifications      Notification[]
   businessInsights   BusinessInsight[]
   inventoryMovements InventoryMovement[]
+  storeApplications  StoreSellerApplication[]
+  storeSeller        StoreSeller?
+  storeListings      StoreListing[]
+  storeOrders        StoreOrder[]
 
   @@index([name])
   @@index([status])
@@ -181,6 +195,8 @@ model User {
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  notifications Notification[]
+  storeApplications StoreSellerApplication[]
 
   @@index([businessId])
   @@index([branchId])
@@ -214,6 +230,8 @@ model Branch {
   users              User[]
   inventoryLevels    InventoryLevel[]
   sales              Sale[]
+  storeSellers       StoreSeller[]
+  storeOrders        StoreOrder[]
   purchases          Purchase[]
   expenses           Expense[]
   employeeShifts     EmployeeShift[]
@@ -267,6 +285,8 @@ model Product {
   inventoryMovements InventoryMovement[]
   saleItems          SaleItem[]
   purchaseItems      PurchaseItem[]
+  storeListing       StoreListing?
+  storeOrderItems    StoreOrderItem[]
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])
@@ -593,16 +613,26 @@ model Notification {
   id         String           @id @default(uuid())
   businessId String
   branchId   String?
+  // Recipient. Notifications are delivered per user so read state is per user.
+  userId     String?
   type       NotificationType
   title      String
   message    String
+  // In-app path to open when the notification is clicked.
+  link       String?
+  // Prevents the same event notifying the same user twice.
+  dedupeKey  String?
   isRead     Boolean          @default(false)
+  readAt     DateTime?
   createdAt  DateTime         @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, dedupeKey])
   @@index([businessId])
   @@index([isRead])
+  @@index([userId, isRead, createdAt])
 }
 
 // Precomputed / cached business-intelligence observations shown on the dashboard.
@@ -674,7 +704,8 @@ model PlatformAdmin {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @default(now()) @updatedAt
 
-  sessions PlatformAdminSession[]
+  sessions          PlatformAdminSession[]
+  notificationReads PlatformNotificationRead[]
 }
 
 model PlatformAdminSession {
@@ -714,4 +745,380 @@ model PlatformAuditLog {
   @@index([targetBusinessId])
   @@index([actorId])
   @@index([action, createdAt])
+}
+
+model PlatformNotification {
+  id        String   @id @default(uuid())
+  type      String
+  title     String
+  message   String
+  link      String?
+  dedupeKey String?  @unique
+  createdAt DateTime @default(now())
+
+  reads PlatformNotificationRead[]
+
+  @@index([createdAt])
+}
+
+model PlatformNotificationRead {
+  notificationId String
+  adminId        String
+  readAt         DateTime @default(now())
+
+  notification PlatformNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  admin        PlatformAdmin        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, adminId])
+}
+
+// ----------------------------------------------------------------------------
+// Insight Store (central multi-vendor marketplace). Migration 5_insight_store.
+// Listings are a publication layer over existing Products: no duplicate
+// catalogue and no separate stock figure (availability = InventoryLevel).
+// ----------------------------------------------------------------------------
+
+enum SellerApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  INFO_REQUIRED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum SellerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ListingStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  UNPUBLISHED
+}
+
+enum StoreOrderStatus {
+  NEW
+  CONFIRMED
+  AWAITING_PAYMENT
+  PAID
+  PROCESSING
+  READY_FOR_COLLECTION
+  DISPATCHED
+  COMPLETED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum StorePaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+enum StoreFulfilment {
+  DELIVERY
+  COLLECTION
+}
+
+model StoreConfig {
+  id                String   @id
+  isOpen            Boolean  @default(true)
+  announcement      String?
+  policies          String?
+  orderExpiryHours  Int      @default(48)
+  requiredDocuments Json     @default("[]")
+  updatedAt         DateTime @default(now()) @updatedAt
+}
+
+model StoreSellerApplication {
+  id               String                  @id @default(uuid())
+  reference        String                  @unique
+  businessId       String
+  applicantUserId  String?
+  status           SellerApplicationStatus @default(DRAFT)
+  data             Json                    @default("{}")
+  requestedAppMode AppMode?
+  infoRequest      String?
+  decisionReason   String?
+  decidedByAdminId String?
+  submittedAt      DateTime?
+  decidedAt        DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @default(now()) @updatedAt
+
+  business  Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  applicant User?                   @relation(fields: [applicantUserId], references: [id], onDelete: SetNull)
+  events    StoreApplicationEvent[]
+  documents StoreDocument[]
+
+  @@index([businessId])
+  @@index([status, submittedAt])
+}
+
+model StoreApplicationEvent {
+  id            String   @id @default(uuid())
+  applicationId String
+  actorType     String
+  actorId       String?
+  actorLabel    String?
+  action        String
+  fromStatus    String?
+  toStatus      String?
+  note          String?
+  internal      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  application StoreSellerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+model StoreDocument {
+  id               String   @id @default(uuid())
+  applicationId    String
+  businessId       String
+  docKey           String
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  data             Bytes
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  application StoreSellerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model StoreSeller {
+  id                    String       @id @default(uuid())
+  businessId            String       @unique
+  status                SellerStatus @default(ACTIVE)
+  slug                  String       @unique
+  approvedApplicationId String?
+  approvedAt            DateTime     @default(now())
+  description           String?
+  city                  String?
+  region                String?
+  country               String?
+  publicPhone           String?
+  whatsappNumber        String?
+  publicEmail           String?
+  openingHours          String?
+  offersDelivery        Boolean      @default(false)
+  deliveryInfo          String?
+  offersCollection      Boolean      @default(true)
+  collectionInfo        String?
+  fulfilmentBranchId    String?
+  isFeatured            Boolean      @default(false)
+  suspendedAt           DateTime?
+  suspendedReason       String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @default(now()) @updatedAt
+
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  fulfilmentBranch  Branch?  @relation(fields: [fulfilmentBranchId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model StoreCategory {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  listings StoreListing[]
+}
+
+model StoreListing {
+  id                String        @id @default(uuid())
+  businessId        String
+  productId         String        @unique
+  categoryId        String?
+  title             String
+  description       String?
+  // Marketplace price; null means use the product's selling price.
+  price             Decimal?      @db.Decimal(12, 2)
+  status            ListingStatus @default(DRAFT)
+  isVisible         Boolean       @default(true)
+  isFeatured        Boolean       @default(false)
+  rejectionReason   String?
+  submittedAt       DateTime?
+  publishedAt       DateTime?
+  reviewedByAdminId String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @default(now()) @updatedAt
+
+  business   Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   StoreCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  events     StoreListingEvent[]
+  images     StoreImage[]
+  cartItems  StoreCartItem[]
+  orderItems StoreOrderItem[]
+
+  @@index([businessId, status])
+  @@index([status, isVisible, publishedAt])
+  @@index([categoryId])
+}
+
+model StoreListingEvent {
+  id         String   @id @default(uuid())
+  listingId  String
+  actorType  String
+  actorId    String?
+  actorLabel String?
+  action     String
+  fromStatus String?
+  toStatus   String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  listing StoreListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+}
+
+model StoreImage {
+  id         String   @id @default(uuid())
+  businessId String
+  listingId  String
+  mimeType   String
+  sizeBytes  Int
+  sortOrder  Int      @default(0)
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  listing StoreListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, sortOrder])
+}
+
+model StoreCart {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  expiresAt DateTime
+
+  items StoreCartItem[]
+}
+
+model StoreCartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  listingId String
+  quantity  Int
+  createdAt DateTime @default(now())
+
+  cart    StoreCart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  listing StoreListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, listingId])
+}
+
+model StoreOrder {
+  id                      String             @id @default(uuid())
+  reference               String             @unique
+  checkoutId              String
+  businessId              String
+  branchId                String?
+  status                  StoreOrderStatus   @default(NEW)
+  paymentStatus           StorePaymentStatus @default(UNPAID)
+  currency                String
+  subtotal                Decimal            @db.Decimal(12, 2)
+  customerName            String
+  customerPhone           String
+  customerEmail           String?
+  fulfilment              StoreFulfilment
+  deliveryAddress         String?
+  note                    String?
+  lookupTokenHash         String
+  // True once stock has been taken from the inventory ledger (at seller
+  // confirmation); guards against double deduction and drives restoration.
+  stockDeducted           Boolean            @default(false)
+  whatsappLinkGeneratedAt DateTime?
+  whatsappOpenedAt        DateTime?
+  attributionChannel      String?
+  expiresAt               DateTime
+  confirmedAt             DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @default(now()) @updatedAt
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  branch   Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  items    StoreOrderItem[]
+  events   StoreOrderEvent[]
+
+  @@index([businessId, status, createdAt])
+  @@index([checkoutId])
+  @@index([status, expiresAt])
+}
+
+model StoreOrderItem {
+  id            String        @id @default(uuid())
+  orderId       String
+  listingId     String?
+  productId     String
+  titleSnapshot String
+  skuSnapshot   String?
+  unitPrice     Decimal       @db.Decimal(12, 2)
+  quantity      Int
+  lineTotal     Decimal       @db.Decimal(12, 2)
+
+  order   StoreOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing StoreListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+}
+
+model StoreOrderEvent {
+  id         String   @id @default(uuid())
+  orderId    String
+  actorType  String
+  actorId    String?
+  actorLabel String?
+  fromStatus String?
+  toStatus   String?
+  action     String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  order StoreOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model StoreCheckout {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+}
+
+model StoreAttributionEvent {
+  id         String   @id @default(uuid())
+  channel    String
+  event      String
+  targetType String
+  targetId   String
+  businessId String?
+  orderId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([channel, event, createdAt])
+  @@index([businessId, createdAt])
 }

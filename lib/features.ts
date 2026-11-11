@@ -16,7 +16,7 @@ import type { SessionClaims } from "./auth";
 // switching back to FULL makes the same records available again.
 // ----------------------------------------------------------------------------
 
-export type AppMode = "FULL" | "INVENTORY_ONLY";
+export type AppMode = "FULL" | "INVENTORY_ONLY" | "STORE_INVENTORY" | "POS_INVENTORY";
 
 export type Module =
   | "pos"        // checkout: creating sales
@@ -25,12 +25,34 @@ export type Module =
   | "expenses"   // expense management
   | "finance"    // profit & loss reporting
   | "shifts"     // cashier shifts / cash reconciliation (POS-dependent)
-  | "advanced";  // POS-dependent analytics
+  | "advanced"   // POS-dependent analytics
+  | "store";     // Insight Store marketplace selling (also needs seller approval)
 
+// Business operating packages. Inventory is in every package.
+//   FULL             inventory + POS + Insight Store + all management modules
+//   INVENTORY_ONLY   inventory only
+//   STORE_INVENTORY  inventory + Insight Store (no POS)
+//   POS_INVENTORY    inventory + POS (no Insight Store)
+const POS_MODULES: Module[] = ["pos", "sales", "customers", "expenses", "finance", "shifts", "advanced"];
 const DISABLED_IN: Record<AppMode, Module[]> = {
   FULL: [],
-  INVENTORY_ONLY: ["pos", "sales", "customers", "expenses", "finance", "shifts", "advanced"],
+  INVENTORY_ONLY: [...POS_MODULES, "store"],
+  STORE_INVENTORY: [...POS_MODULES],
+  POS_INVENTORY: ["store"],
 };
+
+export const PACKAGE_LABEL: Record<AppMode, string> = {
+  FULL: "Full",
+  INVENTORY_ONLY: "Inventory Only",
+  STORE_INVENTORY: "Store and Inventory",
+  POS_INVENTORY: "POS and Inventory",
+};
+
+export const APP_MODES: AppMode[] = ["FULL", "INVENTORY_ONLY", "STORE_INVENTORY", "POS_INVENTORY"];
+
+export function packageIncludesStore(mode: AppMode): boolean {
+  return !DISABLED_IN[mode].includes("store");
+}
 
 const MODULE_LABEL: Record<Module, string> = {
   pos: "Point of Sale",
@@ -40,6 +62,7 @@ const MODULE_LABEL: Record<Module, string> = {
   finance: "Profit and loss reporting",
   shifts: "Cashier shifts",
   advanced: "Sales analytics",
+  store: "Insight Store selling",
 };
 
 export function isModuleEnabled(mode: AppMode, module: Module): boolean {
@@ -70,7 +93,7 @@ export async function moduleGate(session: SessionClaims, module: Module): Promis
   if (isModuleEnabled(mode, module)) return null;
   return NextResponse.json(
     {
-      error: `${MODULE_LABEL[module]} is not available while Insight is in Inventory Only mode. An owner can switch back to Full Functionality in Settings.`,
+      error: `${MODULE_LABEL[module]} is not included in your ${PACKAGE_LABEL[mode]} package. An owner can change the package in Settings.`,
       code: "MODULE_DISABLED",
       mode,
     },

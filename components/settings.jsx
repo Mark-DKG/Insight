@@ -1,7 +1,9 @@
 "use client";
 
 import { useAppNav, useAppMode, visibleNav, refreshAppMode, useCanChangeAppMode } from "../lib/nav";
-import { Layers, Boxes as BoxesModeIcon, Store as StoreModeIcon } from "lucide-react";
+import { Layers, ShoppingBag } from "lucide-react";
+import { PackageSettings, StoreSettings } from "./store-settings";
+import NotificationBell from "./notification-bell";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -55,9 +57,10 @@ const NAV_ITEMS = [
 ];
 
 const SETTINGS_SECTIONS = [
-  { key: "business", label: "Business", icon: Store },
-  { key: "mode", label: "Application Mode", icon: Layers },
-  { key: "users", label: "Users & Roles", icon: Shield },
+  { key: "business", label: "Business", icon: Store, group: "Business Configuration" },
+  { key: "mode", label: "Package", icon: Layers },
+  { key: "store", label: "Insight Store", icon: ShoppingBag },
+  { key: "users", label: "Users & Roles", icon: Shield, group: "General" },
   { key: "inventory", label: "Inventory", icon: Boxes },
   { key: "pos", label: "Point of Sale", icon: ShoppingCart },
   { key: "notifications", label: "Notifications", icon: BellIcon },
@@ -103,45 +106,11 @@ export default function InsightSettings() {
   const navigate = useAppNav();
   const appMode = useAppMode(active);
   const canChangeMode = useCanChangeAppMode();
-  const [pendingMode, setPendingMode] = useState(null); // mode awaiting confirmation
-  const [modeBusy, setModeBusy] = useState(false);
-  const [modeMessage, setModeMessage] = useState(null); // { ok, text }
-
+  const [section, setSection] = useState("business");
   React.useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("section");
     if (wanted && SETTINGS_SECTIONS.some((s) => s.key === wanted)) setSection(wanted);
   }, []);
-
-  async function confirmModeChange() {
-    if (!pendingMode) return;
-    setModeBusy(true);
-    setModeMessage(null);
-    try {
-      const res = await fetch("/api/business/mode", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: pendingMode, confirm: true }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setModeMessage({ ok: false, text: body?.error ?? "The mode could not be changed." });
-        return;
-      }
-      await refreshAppMode();
-      setModeMessage({
-        ok: true,
-        text: body.mode === "INVENTORY_ONLY"
-          ? "Insight is now in Inventory Only mode. Navigation has been updated for everyone in your business."
-          : "Full Functionality restored. All modules and their records are available again.",
-      });
-    } catch {
-      setModeMessage({ ok: false, text: "Couldn't reach the server. The mode was not changed." });
-    } finally {
-      setModeBusy(false);
-      setPendingMode(null);
-    }
-  }
-  const [section, setSection] = useState("business");
 
   const [liveUsers, setLiveUsers] = useState(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
@@ -395,10 +364,7 @@ export default function InsightSettings() {
             <button onClick={() => setDark((d) => !d)} aria-label="Toggle theme" style={{ background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button aria-label="Notifications" style={{ position: "relative", background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
-              <Bell size={16} />
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: bad }} />
-            </button>
+            <NotificationBell theme={theme} dark={dark} />
             <div style={{ width: 32, height: 32, borderRadius: 6, background: deep, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700 }}>OA</div>
           </div>
         </header>
@@ -410,9 +376,10 @@ export default function InsightSettings() {
               const Icon = s.icon;
               const isActive = section === s.key;
               return (
+                <React.Fragment key={s.key}>
+                {s.group && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: theme.textMuted, padding: "10px 12px 4px" }}>{s.group}</div>}
                 <button
-                  key={s.key}
-                  onClick={() => setSection(s.key)}
+                  onClick={() => { setSection(s.key); try { window.history.replaceState(null, "", `?section=${s.key}`); } catch {} }}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", marginBottom: 2,
                     borderRadius: 6, border: "none", cursor: "pointer", textAlign: "left",
@@ -423,6 +390,7 @@ export default function InsightSettings() {
                   <Icon size={15} />
                   {s.label}
                 </button>
+                </React.Fragment>
               );
             })}
           </div>
@@ -468,96 +436,12 @@ export default function InsightSettings() {
             )}
 
             {section === "mode" && (
-              <Card style={{ maxWidth: 720 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Application Mode</div>
-                <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 18 }}>Choose how your business uses Insight.</div>
+              <PackageSettings theme={theme} dark={dark} card={Card} appMode={appMode} canChange={canChangeMode}
+                onChanged={refreshAppMode} onOpenStore={() => setSection("store")} />
+            )}
 
-                <div role="radiogroup" aria-label="Application mode" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                  {[
-                    { key: "FULL", title: "Full Functionality", text: "Complete retail and business management.", Icon: StoreModeIcon },
-                    { key: "INVENTORY_ONLY", title: "Inventory Only", text: "Standalone inventory management without POS and sales management features.", Icon: BoxesModeIcon },
-                  ].map(({ key, title, text, Icon }) => {
-                    const isCurrent = appMode === key;
-                    return (
-                      <button
-                        key={key}
-                        role="radio"
-                        aria-checked={isCurrent}
-                        disabled={!canChangeMode || isCurrent || modeBusy || !appMode}
-                        onClick={() => { setModeMessage(null); setPendingMode(key); }}
-                        style={{
-                          textAlign: "left", padding: 16, borderRadius: 8, cursor: canChangeMode && !isCurrent ? "pointer" : "default",
-                          border: `2px solid ${isCurrent ? primary : theme.border}`,
-                          background: isCurrent ? (dark ? "#173C26" : "#F0FFF0") : theme.surface, color: theme.text,
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                          <Icon size={17} color={isCurrent ? primary : theme.textMuted} />
-                          <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
-                          {isCurrent && (
-                            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: primary, border: `1px solid ${primary}`, borderRadius: 4, padding: "1px 6px" }}>Active</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 12.5, color: theme.textMuted }}>{text}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {!appMode && <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 14 }}>Loading current mode…</div>}
-                {appMode && !canChangeMode && (
-                  <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 14 }}>
-                    Only the business owner can change the application mode.
-                  </div>
-                )}
-                {modeMessage && (
-                  <div role="status" style={{ marginTop: 14, fontSize: 13, padding: "10px 12px", borderRadius: 6, color: modeMessage.ok ? primary : bad, background: modeMessage.ok ? (dark ? "#173C26" : "#E7F5EA") : (dark ? "#3A1D1B" : "#FBE9E7") }}>
-                    {modeMessage.text}
-                  </div>
-                )}
-
-                {pendingMode && (
-                  <div role="dialog" aria-modal="true" aria-labelledby="mode-dialog-title"
-                    style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 30, padding: 16 }}>
-                    <div style={{ width: "min(460px, 100%)", background: theme.surface, color: theme.text, borderRadius: 10, border: `1px solid ${theme.border}`, padding: 22 }}>
-                      <div id="mode-dialog-title" style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>
-                        {pendingMode === "INVENTORY_ONLY" ? "Switch to Inventory Only?" : "Restore Full Functionality?"}
-                      </div>
-                      {pendingMode === "INVENTORY_ONLY" ? (
-                        <>
-                          <div style={{ fontSize: 13, marginBottom: 8 }}>These modules will become unavailable for everyone in your business:</div>
-                          <ul style={{ fontSize: 13, margin: "0 0 10px 18px", padding: 0, lineHeight: 1.7 }}>
-                            <li>Point of Sale and sales checkout</li>
-                            <li>Sales history, voids and refunds</li>
-                            <li>Customers and customer credit</li>
-                            <li>Expenses</li>
-                            <li>Profit and loss reporting</li>
-                            <li>Sales analytics (Advanced Features) and cashier shifts</li>
-                          </ul>
-                        </>
-                      ) : (
-                        <div style={{ fontSize: 13, marginBottom: 10 }}>
-                          Point of Sale, sales, customers, expenses, profit reporting and analytics will be available again.
-                        </div>
-                      )}
-                      <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 16 }}>
-                        No records are deleted. Existing sales, customers and expenses are kept and return when Full Functionality is enabled.
-                        {pendingMode === "INVENTORY_ONLY" ? " Sales queued offline on POS devices will not sync until Full Functionality is restored." : ""}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                        <button onClick={() => setPendingMode(null)} disabled={modeBusy}
-                          style={{ padding: "9px 16px", borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.text, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                          Cancel
-                        </button>
-                        <button onClick={confirmModeChange} disabled={modeBusy}
-                          style={{ padding: "9px 16px", borderRadius: 6, border: "none", background: primary, color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", opacity: modeBusy ? 0.7 : 1 }}>
-                          {modeBusy ? "Switching…" : pendingMode === "INVENTORY_ONLY" ? "Switch to Inventory Only" : "Restore Full Functionality"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </Card>
+            {section === "store" && (
+              <StoreSettings theme={theme} dark={dark} card={Card} inputStyle={inputStyle} label={label} appMode={appMode} />
             )}
 
             {section === "users" && (

@@ -1,5 +1,7 @@
 "use client";
 
+import NotificationBell from "./notification-bell";
+
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { buildReceiptFromSale, printReceipt, shareReceipt } from "../lib/receipt";
@@ -202,9 +204,12 @@ export default function InsightSales() {
             <div style={{ fontSize: 17, fontWeight: 700 }}>Sales</div>
             <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 1 }}>{session?.business?.name ?? "Your business"}</div>
           </div>
-          <button onClick={() => setDark((d) => !d)} aria-label="Toggle theme" style={{ background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
-            {dark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setDark((d) => !d)} aria-label="Toggle theme" style={{ background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
+              {dark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <NotificationBell theme={theme} dark={dark} />
+          </div>
         </header>
 
         <main style={{ padding: 24, flex: 1, overflowY: "auto" }}>

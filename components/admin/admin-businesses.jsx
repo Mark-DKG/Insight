@@ -4,12 +4,14 @@ import React, { useEffect, useState } from "react";
 import AdminShell, { useAdmin } from "./admin-shell";
 import { Badge, Button, Card, Notice, fmtDate, fmtDateTime, inputStyle } from "./ui";
 
+const PACKAGE_LABEL = { FULL: "Full", INVENTORY_ONLY: "Inventory Only", STORE_INVENTORY: "Store and Inventory", POS_INVENTORY: "POS and Inventory" };
+
 const COLUMNS = [
   { key: "name", label: "Business", sort: "name" },
   { key: "owner", label: "Owner" },
   { key: "created", label: "Registered", sort: "created" },
   { key: "status", label: "Status" },
-  { key: "mode", label: "Mode" },
+  { key: "mode", label: "Package" },
   { key: "users", label: "Users", sort: "users" },
   { key: "branches", label: "Branches" },
   { key: "activity", label: "Last activity", sort: "activity" },
@@ -59,7 +61,7 @@ function Directory() {
           <option value="">All statuses</option><option value="ACTIVE">Active</option><option value="SUSPENDED">Suspended</option>
         </select>
         <select aria-label="Mode" value={mode} onChange={(e) => { setMode(e.target.value); setPage(1); }} style={select}>
-          <option value="">All modes</option><option value="FULL">Full Functionality</option><option value="INVENTORY_ONLY">Inventory Only</option>
+          <option value="">All packages</option><option value="FULL">Full</option><option value="INVENTORY_ONLY">Inventory Only</option><option value="STORE_INVENTORY">Store and Inventory</option><option value="POS_INVENTORY">POS and Inventory</option>
         </select>
       </div>
 
@@ -97,7 +99,7 @@ function Directory() {
                   <td style={td}>{b.owner ? <>{b.owner.name}<div style={{ fontSize: 12, color: t.muted }}>{b.owner.email}</div></> : <span style={{ color: t.muted }}>No owner</span>}</td>
                   <td style={td}>{fmtDate(b.createdAt)}</td>
                   <td style={td}><Badge t={t} tone={b.status === "ACTIVE" ? "good" : "bad"}>{b.status === "ACTIVE" ? "Active" : "Suspended"}</Badge></td>
-                  <td style={td}>{b.appMode === "FULL" ? "Full" : "Inventory Only"}</td>
+                  <td style={td}>{PACKAGE_LABEL[b.appMode] ?? b.appMode}</td>
                   <td style={td}>{b.userCount}</td>
                   <td style={td}>{b.branchCount}</td>
                   <td style={td}>{b.lastActivity ? fmtDateTime(b.lastActivity) : <span style={{ color: t.muted }}>None yet</span>}</td>

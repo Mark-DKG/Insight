@@ -4,8 +4,9 @@ import React, { useEffect, useState, useMemo, createContext, useContext } from "
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, Building2, Users, GitBranch, ShieldCheck, LineChart, Activity, RefreshCw, ScrollText,
-  LifeBuoy, HardDrive, Bell, Flag, Settings, Lock, LogOut, Sun, Moon, Menu, X,
+  LifeBuoy, HardDrive, Bell, Flag, Settings, Lock, LogOut, Sun, Moon, Menu, X, ShoppingBag,
 } from "lucide-react";
+import NotificationBell from "../notification-bell";
 import { ADMIN_THEMES, Button, Card, Notice, inputStyle } from "./ui";
 
 // Admin console frame: verifies the admin session, enforces the forced
@@ -19,6 +20,7 @@ export const useAdmin = () => useContext(AdminContext);
 const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, live: true, perm: "businesses.read" },
   { href: "/admin/businesses", label: "Businesses", icon: Building2, live: true, perm: "businesses.read" },
+  { href: "/admin/store", label: "Insight Store", icon: ShoppingBag, live: true, perm: "marketplace.read" },
   { label: "Users", icon: Users, milestone: 2 },
   { label: "Branches", icon: GitBranch, milestone: 2 },
   { label: "Administrators", icon: ShieldCheck, milestone: 2 },
@@ -198,6 +200,7 @@ export default function AdminShell({ active, title, subtitle, children }) {
               <div style={{ fontWeight: 600 }}>{me.admin.name}</div>
               <div style={{ color: t.muted }}>{me.admin.roleLabel}</div>
             </div>
+            <NotificationBell endpoint="/api/admin/notifications" dark={dark} theme={{ surface: t.surface, border: t.border, text: t.text, textMuted: t.muted }} />
             <button onClick={toggleTheme} aria-label="Toggle theme" style={{ background: "transparent", border: `1px solid ${t.border}`, borderRadius: 6, padding: 7, color: t.text, cursor: "pointer", display: "flex" }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>

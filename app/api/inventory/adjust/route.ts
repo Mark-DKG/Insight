@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { checkStockAlerts } from "@/lib/notify";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
       return { quantity: updated.quantity, movement };
     });
 
+    await checkStockAlerts(session.businessId, [input.productId]).catch((e) => console.error("Stock alert check failed:", e));
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof AdjustError) {

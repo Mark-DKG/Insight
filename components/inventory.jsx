@@ -1,6 +1,8 @@
 "use client";
 
-import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
+import NotificationBell from "./notification-bell";
+
+import { useAppNav, useAppMode, visibleNav, hasPos } from "../lib/nav";
 import ProductActions from "./product-actions";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
@@ -439,13 +441,7 @@ export default function InsightInventory() {
             >
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button
-              aria-label="Notifications"
-              style={{ position: "relative", background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}
-            >
-              <Bell size={16} />
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: bad }} />
-            </button>
+            <NotificationBell theme={theme} dark={dark} />
             <div style={{ width: 32, height: 32, borderRadius: 6, background: deep, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700 }}>
               OA
             </div>
@@ -453,7 +449,7 @@ export default function InsightInventory() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
-          {modeNotice && appMode === "INVENTORY_ONLY" && (
+          {modeNotice && appMode && !hasPos(appMode) && (
             <div role="status" style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 6, fontSize: 13, background: dark ? "#173C26" : "#E7F5EA", color: dark ? "#CFE3D6" : "#145A32", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>That page isn't available in Inventory Only mode, so you've been brought to Inventory. An owner can switch modes in Settings.</span>
               <button onClick={() => setModeNotice(false)} aria-label="Dismiss" style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontWeight: 700 }}>×</button>

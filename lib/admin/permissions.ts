@@ -17,6 +17,9 @@ export const PLATFORM_PERMISSIONS = [
   "settings.manage",
   "administrators.manage",
   "workspace.access",
+  // Insight Store: review sellers and listings, oversee orders, configure.
+  "marketplace.read",
+  "marketplace.manage",
 ] as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[number];
@@ -24,12 +27,12 @@ export type PlatformRole = "SUPER_ADMIN" | "PLATFORM_ADMIN" | "TECHNICAL_ADMIN" 
 
 export const ROLE_DEFAULTS: Record<PlatformRole, PlatformPermission[]> = {
   SUPER_ADMIN: [...PLATFORM_PERMISSIONS],
-  PLATFORM_ADMIN: ["businesses.read", "users.read", "analytics.read", "audit.read"],
+  PLATFORM_ADMIN: ["businesses.read", "users.read", "analytics.read", "audit.read", "marketplace.read", "marketplace.manage"],
   TECHNICAL_ADMIN: ["system.monitor", "businesses.read", "audit.read"],
   // Support staff see business directories but not business data by default;
   // workspace.access must be granted explicitly.
-  SUPPORT_ADMIN: ["businesses.read", "users.read"],
-  ANALYST: ["analytics.read", "businesses.read"],
+  SUPPORT_ADMIN: ["businesses.read", "users.read", "marketplace.read"],
+  ANALYST: ["analytics.read", "businesses.read", "marketplace.read"],
 };
 
 export const ROLE_LABEL: Record<PlatformRole, string> = {

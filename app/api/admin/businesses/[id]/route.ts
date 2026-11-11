@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     where: { id: params.id },
     select: {
       id: true, name: true, address: true, phone: true, email: true, currency: true, taxRate: true,
-      appMode: true, status: true, suspendedAt: true, suspendedReason: true, createdAt: true, updatedAt: true,
+      appMode: true, pendingAppMode: true, status: true, suspendedAt: true, suspendedReason: true, createdAt: true, updatedAt: true,
     },
   });
   if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
@@ -83,7 +83,7 @@ const Patch = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reactivate"), reason: z.string().trim().min(5, "Give a reason (at least 5 characters).") }),
   z.object({
     action: z.literal("set_mode"),
-    mode: z.enum(["FULL", "INVENTORY_ONLY"]),
+    mode: z.enum(["FULL", "INVENTORY_ONLY", "STORE_INVENTORY", "POS_INVENTORY"]),
     reason: z.string().trim().min(5, "Give a reason (at least 5 characters)."),
   }),
 ]);
@@ -127,8 +127,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         data = { status: "ACTIVE", suspendedAt: null, suspendedReason: null };
         action = "BUSINESS_REACTIVATED";
       } else {
-        if (before.appMode === input.mode) throw new Error("ALREADY:The business is already in that mode.");
-        data = { appMode: input.mode };
+        if (before.appMode === input.mode) throw new Error("ALREADY:The business is already on that package.");
+        // An administrator override replaces any package request waiting on
+        // seller approval. Store selling still needs an approved seller.
+        data = { appMode: input.mode, pendingAppMode: null };
         action = "APP_MODE_OVERRIDDEN";
       }
 

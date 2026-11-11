@@ -1,5 +1,7 @@
 "use client";
 
+import NotificationBell from "./notification-bell";
+
 import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
@@ -453,32 +455,7 @@ export default function InsightDashboard() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <button
-              aria-label="Notifications"
-              style={{
-                position: "relative",
-                background: "transparent",
-                border: `1px solid ${theme.border}`,
-                borderRadius: 6,
-                padding: 8,
-                cursor: "pointer",
-                color: theme.text,
-                display: "flex",
-              }}
-            >
-              <Bell size={16} />
-              <span
-                style={{
-                  position: "absolute",
-                  top: -3,
-                  right: -3,
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: "#B3261E",
-                }}
-              />
-            </button>
+            <NotificationBell theme={theme} dark={dark} />
             <button
               onClick={toggle}
               aria-label="Toggle theme"

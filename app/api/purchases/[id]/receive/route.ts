@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { checkStockAlerts } from "@/lib/notify";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 
@@ -139,6 +140,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return updatedPurchase;
     });
 
+    await checkStockAlerts(session.businessId, purchase.items.map((i) => i.productId)).catch((e) => console.error("Stock alert check failed:", e));
     return NextResponse.json({ purchase: updated });
   } catch (error) {
     if (error instanceof ReceiveError) {

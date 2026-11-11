@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       SELECT 1 FROM "User" u2 WHERE u2."businessId" = b.id AND lower(u2.email) LIKE ${like}))`);
   }
   if (status === "ACTIVE" || status === "SUSPENDED") conditions.push(Prisma.sql`b.status = ${status}::"BusinessStatus"`);
-  if (mode === "FULL" || mode === "INVENTORY_ONLY") conditions.push(Prisma.sql`b."appMode" = ${mode}::"AppMode"`);
+  if (mode === "FULL" || mode === "INVENTORY_ONLY" || mode === "STORE_INVENTORY" || mode === "POS_INVENTORY") conditions.push(Prisma.sql`b."appMode" = ${mode}::"AppMode"`);
   const where = Prisma.join(conditions, " AND ");
 
   const rows = await prisma.$queryRaw<

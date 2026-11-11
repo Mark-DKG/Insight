@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import AdminShell, { useAdmin } from "./admin-shell";
 import { Badge, Button, Card, ConfirmDialog, Notice, Stat, fmtDate, fmtDateTime, fmtMoney, fmtNum, inputStyle } from "./ui";
 
+const PACKAGE_LABEL = { FULL: "Full", INVENTORY_ONLY: "Inventory Only", STORE_INVENTORY: "Store and Inventory", POS_INVENTORY: "POS and Inventory" };
+
 const ROLE = { OWNER: "Owner", MANAGER: "Manager", CASHIER: "Cashier" };
 
 function Detail({ businessId }) {
@@ -72,7 +74,8 @@ function Detail({ businessId }) {
             <div style={{ fontSize: 11.5, color: t.muted, fontFamily: "ui-monospace, Menlo, monospace", marginTop: 2 }}>{b.id}</div>
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               <Badge t={t} tone={b.status === "ACTIVE" ? "good" : "bad"}>{b.status === "ACTIVE" ? "Active" : "Suspended"}</Badge>
-              <Badge t={t}>{b.appMode === "FULL" ? "Full Functionality" : "Inventory Only"}</Badge>
+              <Badge t={t}>{PACKAGE_LABEL[b.appMode] ?? b.appMode}</Badge>
+              {b.pendingAppMode && <Badge t={t} tone="warn">Requested: {PACKAGE_LABEL[b.pendingAppMode]}</Badge>}
               <Badge t={t}>{b.currency}</Badge>
             </div>
             {b.status === "SUSPENDED" && (
@@ -82,8 +85,8 @@ function Detail({ businessId }) {
           {canManage && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
               <Button t={t} onClick={() => setEdit({ name: b.name, email: b.email ?? "", phone: b.phone ?? "", address: b.address ?? "" })}>Edit details</Button>
-              <Button t={t} onClick={() => { setDialogError(""); setDialog({ action: "set_mode", mode: b.appMode === "FULL" ? "INVENTORY_ONLY" : "FULL" }); }}>
-                Switch to {b.appMode === "FULL" ? "Inventory Only" : "Full Functionality"}
+              <Button t={t} onClick={() => { setDialogError(""); setDialog({ action: "set_mode", mode: Object.keys(PACKAGE_LABEL).find((k) => k !== b.appMode) }); }}>
+                Change package
               </Button>
               {b.status === "ACTIVE" ? (
                 <Button t={t} kind="danger" onClick={() => { setDialogError(""); setDialog({ action: "suspend" }); }}>Suspend</Button>
@@ -235,10 +238,15 @@ function Detail({ businessId }) {
       )}
       {dialog?.action === "set_mode" && (
         <ConfirmDialog t={t} requireReason busy={busy} error={dialogError}
-          confirmLabel={`Switch to ${dialog.mode === "FULL" ? "Full Functionality" : "Inventory Only"}`}
-          title="Override application mode?"
-          body={`This changes the mode for everyone in ${b.name}. ${dialog.mode === "INVENTORY_ONLY" ? "POS, sales, customers, expenses and profit reporting become unavailable" : "All modules become available again"}. No records are deleted. The business's audit log will show this change.`}
-          onCancel={() => setDialog(null)} onConfirm={(reason) => act({ action: "set_mode", mode: dialog.mode, reason }, "Application mode changed.")} />
+          confirmLabel={`Switch to ${PACKAGE_LABEL[dialog.mode]}`}
+          title="Override package?"
+          body={`This changes the package for everyone in ${b.name}. Modules outside the package become unavailable; no records are deleted. Insight Store selling still requires an approved seller. The business's audit log will show this change.`}
+          onCancel={() => setDialog(null)} onConfirm={(reason) => act({ action: "set_mode", mode: dialog.mode, reason }, "Package changed.")}>
+          <label htmlFor="pkg-select" style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 5 }}>New package</label>
+          <select id="pkg-select" value={dialog.mode} onChange={(e) => setDialog({ ...dialog, mode: e.target.value })} style={{ ...inputStyle(t), marginBottom: 10 }}>
+            {Object.entries(PACKAGE_LABEL).filter(([k]) => k !== b.appMode).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </ConfirmDialog>
       )}
       {edit && (
         <ConfirmDialog t={t} requireReason busy={busy} error={dialogError} confirmLabel="Save changes"

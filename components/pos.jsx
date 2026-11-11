@@ -1,5 +1,7 @@
 "use client";
 
+import NotificationBell from "./notification-bell";
+
 import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
@@ -532,13 +534,7 @@ export default function InsightPOS() {
             >
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button
-              aria-label="Notifications"
-              style={{ position: "relative", background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}
-            >
-              <Bell size={16} />
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: bad }} />
-            </button>
+            <NotificationBell theme={theme} dark={dark} />
             <div style={{ width: 30, height: 30, borderRadius: 6, background: deep, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
               AO
             </div>

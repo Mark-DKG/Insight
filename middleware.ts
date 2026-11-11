@@ -14,6 +14,11 @@ const PUBLIC_PATHS = [
   "/api/auth/refresh",
   // Crash reports must get through even when the session has expired.
   "/api/client-errors",
+  // Insight Store marketplace: guests browse, build a cart and place order
+  // requests without an account. Only the public, read-safe store API is
+  // open; seller and admin store APIs stay protected.
+  "/store",
+  "/api/store/public",
 ];
 
 // Platform admin area: completely separate auth (lib/admin/session.ts).

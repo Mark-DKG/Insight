@@ -33,8 +33,12 @@ export type Permission =
   | "settings:read"
   | "settings:write"
   | "branches:write"
-  // Switching Full Functionality <-> Inventory Only. Owner only.
-  | "settings.manage_application_mode";
+  // Changing the business package. Owner only.
+  | "settings.manage_application_mode"
+  // Insight Store
+  | "store:read"      // view seller area, listings, marketplace orders
+  | "store:manage"    // edit profile and listings, handle marketplace orders
+  | "store:apply";    // seller application (Owner only)
 
 const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
   OWNER: [
@@ -50,6 +54,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "settings:read", "settings:write",
     "branches:write",
     "settings.manage_application_mode",
+    "store:read", "store:manage", "store:apply",
   ],
   MANAGER: [
     "products:read", "products:write",
@@ -62,6 +67,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "employees:read",
     "reports:read",
     "settings:read",
+    "store:read", "store:manage",
   ],
   CASHIER: [
     "products:read",
@@ -69,6 +75,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "sales:create",
     "sales:read",
     "customers:read",
+    "store:read",
   ],
 };
 

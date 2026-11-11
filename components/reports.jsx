@@ -1,6 +1,8 @@
 "use client";
 
-import { useAppNav, useAppMode, visibleNav } from "../lib/nav";
+import NotificationBell from "./notification-bell";
+
+import { useAppNav, useAppMode, visibleNav, hasPos } from "../lib/nav";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
 import React, { useState, useMemo } from "react";
@@ -129,7 +131,7 @@ export default function InsightReports() {
   const navigate = useAppNav();
   const appMode = useAppMode(active);
   React.useEffect(() => {
-    if (appMode === "INVENTORY_ONLY") setReportTab("inventory");
+    if (appMode && !hasPos(appMode)) setReportTab("inventory");
   }, [appMode]);
   const [reportTab, setReportTab] = useState("sales"); // sales | profit | inventory
   const [range, setRange] = useState("This Week");
@@ -385,10 +387,7 @@ export default function InsightReports() {
             <button onClick={() => setDark((d) => !d)} aria-label="Toggle theme" style={{ background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button aria-label="Notifications" style={{ position: "relative", background: "transparent", border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, cursor: "pointer", color: theme.text, display: "flex" }}>
-              <Bell size={16} />
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: bad }} />
-            </button>
+            <NotificationBell theme={theme} dark={dark} />
             <div style={{ width: 32, height: 32, borderRadius: 6, background: deep, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700 }}>OA</div>
           </div>
         </header>
@@ -422,7 +421,7 @@ export default function InsightReports() {
               { key: "sales", label: "Sales" },
               { key: "profit", label: "Profit" },
               { key: "inventory", label: "Inventory" },
-            ].filter((t) => appMode !== "INVENTORY_ONLY" || t.key === "inventory").map((t) => (
+            ].filter((t) => !appMode || hasPos(appMode) || t.key === "inventory").map((t) => (
               <button
                 key={t.key}
                 onClick={() => setReportTab(t.key)}
