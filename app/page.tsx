@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import "./landing.css";
-import Showcase, { NAV_LINKS } from "@/components/landing/showcase";
+import Showcase from "@/components/landing/showcase";
+import { NAV_LINKS } from "@/lib/landing/nav";
 import { siteOrigin } from "@/lib/store/origin";
 import { verifyAccessToken } from "@/lib/jwt";
 

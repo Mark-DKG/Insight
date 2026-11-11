@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Menu, X, ArrowRight } from "lucide-react";
 import { SHOWCASE_PRODUCTS, productTitle } from "../../lib/landing/products";
+import { NAV_LINKS } from "../../lib/landing/nav";
 
 // The interactive part of the landing page: the accent backdrop, the dark
 // panel, the header, and the product showcase itself.
@@ -12,15 +13,6 @@ import { SHOWCASE_PRODUCTS, productTitle } from "../../lib/landing/products";
 // are photographs, not models, so there is no WebGL scene and nothing claims
 // to be one; this renders everywhere, costs no extra bundle, and degrades to a
 // plain image when motion is reduced.
-
-export const NAV_LINKS = [
-  { label: "Home", href: "/" },
-  { label: "Features", href: "/#features" },
-  { label: "How It Works", href: "/#how-it-works" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "Insight Store", href: "/store" },
-  { label: "About Us", href: "/#about" },
-];
 
 const AUTOPLAY_MS = 7000;
 

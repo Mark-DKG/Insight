@@ -11,6 +11,8 @@ const PUBLIC_PATHS = [
   // `pathname === p` or `pathname.startsWith(p + "/")`, so "/" never widens
   // into a prefix that would expose the authenticated app.
   "/",
+  "/robots.txt",
+  "/sitemap.xml",
   "/login",
   "/register",
   "/api/auth/login",
