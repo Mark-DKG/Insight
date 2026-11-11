@@ -40,6 +40,16 @@ function handleAdmin(request: NextRequest, pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Dedicated marketplace host (e.g. store.insight.9devs.app): its root and
+  // non-store paths show the marketplace. Only takes effect once the domain
+  // is attached to the project.
+  const host = request.headers.get("host") ?? "";
+  if (host.startsWith("store.") && !pathname.startsWith("/store") && !pathname.startsWith("/api/store/public") && !pathname.startsWith("/_next")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname === "/" ? "/store" : `/store${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   if (pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/")) {
     return handleAdmin(request, pathname);
   }

@@ -98,23 +98,101 @@ Key route groups:
 - **Hosting**: deployed to Vercel; `postinstall: prisma generate` runs automatically on every build.
 - **Environment variables**: `DATABASE_URL` (Neon connection string), `JWT_SIGNING_SECRET` (signs/verifies access tokens) — both set in Vercel's project settings, never committed to the repo.
 
-## Application modes (Full Functionality / Inventory Only)
+## Packages (Full / Inventory Only / Store and Inventory / POS and Inventory)
 
-Each business has one mode, `Business.appMode` (`FULL` default, `INVENTORY_ONLY`).
+Each business has one package, `Business.appMode`: `FULL` (default), `INVENTORY_ONLY`,
+`STORE_INVENTORY`, `POS_INVENTORY`. `Business.pendingAppMode` holds a requested package that is
+waiting on Insight Store seller approval.
 
-- **Server enforcement — `lib/features.ts`.** `moduleGate(session, module)` reads the caller's
-  business mode and returns `403 { code: "MODULE_DISABLED" }` for a disabled module. It runs after
-  the role-permission check in every route of a gated module, so mode gating is independent of RBAC
-  and tenant scoping. Disabled in Inventory Only: `pos` (POST /api/sales), `sales` (sales list,
-  detail, void/refund), `customers` (customers, statements, credit payments), `expenses`,
-  `finance` (GET /api/reports/profit), `shifts` (cashier shifts).
-- **Switching — `PUT /api/business/mode`.** Requires `settings.manage_application_mode` (Owner only),
-  an explicit `confirm: true`, runs in a transaction, and writes an `APP_MODE_CHANGED` audit log
-  with business, user, previous and new mode. A failed update returns an error, never a success.
-- **Interface — `lib/nav.js`.** `useAppMode(pageKey)` loads the mode once per page load, hides
-  disabled sidebar items (`visibleNav`), redirects disabled pages to `/inventory`, maps Dashboard to
-  Inventory and Employees to Settings → Users. Reports shows only the Inventory report.
-- **Data is never deleted.** Restoring Full Functionality makes all records available again.
+| Module | Full | Inventory Only | Store and Inventory | POS and Inventory |
+|---|---|---|---|---|
+| Inventory, products, purchases, suppliers, reports (inventory) | ✓ | ✓ | ✓ | ✓ |
+| POS, sales, customers, expenses, profit, shifts, analytics | ✓ | — | — | ✓ |
+| Insight Store selling (`store`) | ✓ | — | ✓ | — |
+
+- **Server enforcement — `lib/features.ts`.** `moduleGate(session, module)` returns
+  `403 { code: "MODULE_DISABLED" }` for a module outside the package. Store seller APIs use
+  `requireSeller` (`lib/store/server.ts`), which also requires an approved, active seller record.
+- **Changing package — `PUT /api/business/mode`.** Owner only (`settings.manage_application_mode`),
+  explicit `confirm: true`, transactional, audit-logged. Choosing Store and Inventory without seller
+  approval does not change the package: it sets `pendingAppMode`, opens a seller application, and the
+  package is applied automatically when the application is approved. Withdrawal or rejection clears it.
+  Super Admins can override the package (`PATCH /api/admin/businesses/[id]`, `set_mode`, with reason).
+- **Interface — `lib/nav.js`.** `hasPos(mode)` / `hasStore(mode)` drive navigation: packages without
+  POS hide POS screens and redirect them to `/inventory`; packages with Store add an "Insight Store"
+  sidebar item (`/seller`). Settings → Business Configuration → Package shows all four.
+- **Data is never deleted.** Hidden modules keep their records; switching back restores them. Published
+  listings are hidden from the marketplace while the package excludes Store.
+
+## Insight Store (central multi-vendor marketplace)
+
+Public marketplace at `/store` (intended domain `store.insight.9devs.app`, not yet configured).
+Guests browse, search, build one cart across sellers and send each seller an order request on
+WhatsApp. No online payment, no seller websites or custom domains.
+
+**Seller approval.** `StoreSellerApplication` (Draft → Submitted → Under review → Additional info
+required → Approved / Rejected / Withdrawn; state machine in `lib/store/core.ts`). Entry points:
+Settings → Business Configuration → Insight Store, or choosing a package that includes Store. Never
+part of registration or onboarding. A partial unique index allows one open application per business.
+Documents (PDF/PNG/JPEG ≤ 5 MB, checked by magic bytes) are stored in Postgres (`StoreDocument`,
+bytea, SHA-256), served only to the owner and to admins with `marketplace.read`; every admin view is
+audit-logged. Every transition writes `StoreApplicationEvent` (admin internal notes are flagged
+`internal` and never shown to the business). Approval creates `StoreSeller` and applies any pending
+package. It never publishes products.
+
+**Listings over inventory.** `StoreListing` is a publication layer over an existing `Product` (one per
+product). It holds title, description, optional store price, category, photos and status; it never
+holds stock. Availability is the product's `InventoryLevel` at the seller's fulfilment branch
+(`StoreSeller.fulfilmentBranchId`, default main branch), so marketplace and in-store sales draw on one
+count. Statuses: Draft → Submitted → Under review → Published / Rejected; Unpublished. Approval
+publishes. Editing customer-visible content of an approved listing returns it to Draft for re-review.
+An unedited unpublished listing can be republished without review. Public visibility
+(`PUBLIC_LISTING_WHERE`, `lib/store/listing.ts`) requires: listing published and visible, product
+active, business active, package includes Store, seller active.
+
+**Cart and checkout.** Guest cart token in an httpOnly cookie; only its SHA-256 is stored
+(`StoreCart`). Checkout (`POST /api/store/public/checkout`) revalidates every line against live
+availability, splits the cart into one `StoreOrder` per seller, and is idempotent on a client
+`idempotencyKey` (`StoreCheckout`, unique). The status-page token is derived (HMAC) from that key, so
+a retried submit returns the same orders and links. Orders hold **no** stock while `NEW` and expire
+after `StoreConfig.orderExpiryHours` (lazy expiry when orders are read).
+
+**WhatsApp.** Insight builds `wa.me` links with a prefilled order message (seller's number,
+normalised with Ghana +233 as default). It records when the link was generated and when the customer
+tapped it (`whatsappOpenedAt`); it never claims a message was sent, accepted or paid.
+
+**Seller order management** (`lib/store/orders.ts`). Valid transitions only (`ORDER_TRANSITIONS`).
+Confirming takes stock with a conditional decrement (`quantity >= n`) plus a `STOCK_OUT` movement, so
+two confirmations can never oversell; any shortfall rolls back the whole confirmation. Cancelling a
+confirmed order returns stock with a `RETURNED` movement (`stockDeducted` guards against doing either
+twice). Payment is recorded by the seller (`record_payment`); completion requires it. Reject/cancel
+require a reason, which the customer sees on their status page.
+
+**Sharing and attribution.** Share buttons use public share URLs (WhatsApp, Facebook, X, Telegram)
+or the device share sheet / copy link (Instagram, TikTok have no web share URL). Shared links carry
+`?ref=<channel>`; Insight counts taps, visits and later orders (`StoreAttributionEvent`). No social
+network API is used.
+
+**Administration.** `/admin/store` (permissions `marketplace.read`, `marketplace.manage`): overview,
+application review (start review, request info, approve, reject, internal notes, documents), sellers
+(suspend/reinstate with reason, feature), listing moderation (approve/reject/take down/feature),
+read-only order oversight (customer names masked in lists; detail views audit-logged), marketplace
+settings (open/closed, announcement, expiry hours, required documents) and categories. Every change
+writes `PlatformAuditLog`.
+
+## Notifications
+
+- **Business** (`Notification`): one row per recipient user (`userId`), so unread counts and read state
+  are per person; `dedupeKey` (unique per user) makes creation idempotent. Created by `lib/notify.ts`:
+  low/out-of-stock alerts after sales, adjustments, transfers, receiving and store confirmations
+  (deduped per product, re-armed when stock recovers); new store orders; application and listing
+  decisions; seller suspension. `GET /api/notifications` (cursor pagination, own rows only) and
+  `POST /api/notifications/read` (`ids` or `all`).
+- **Platform** (`PlatformNotification` + per-admin `PlatformNotificationRead`): new/updated seller
+  applications and listings awaiting review. `GET/POST /api/admin/notifications[/read]`.
+- **UI**: `components/notification-bell.jsx` in every business screen header and the admin console:
+  real unread count (polled every 60 s while visible), panel with mark read / mark all read,
+  click-through to the related screen, load older, loading/empty/error states.
 
 ## Offline POS (current behaviour)
 

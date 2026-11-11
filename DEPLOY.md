@@ -12,7 +12,16 @@ A failed build never replaces the live site.
 | `JWT_SIGNING_SECRET` | Long random string, e.g. `openssl rand -base64 48`. Rotating it signs everyone out. |
 | `PLATFORM_ADMIN_SECRET` | Admin console secret, at least 32 random characters. Rotating it forces administrators to re-enrol MFA. |
 
+| `NEXT_PUBLIC_STORE_ORIGIN` | Optional. Absolute origin used in Insight Store share links and Open Graph tags (e.g. `https://store.insight.9devs.app`). Defaults to the request host. |
+
 Never commit real values. `.env.example` lists the names only.
+
+## Insight Store domain
+
+The marketplace is served at `/store` on the main deployment. To use `store.insight.9devs.app`:
+add the domain in Vercel → Project → Domains, create the DNS record Vercel shows at the DNS host
+for `9devs.app`, and set `NEXT_PUBLIC_STORE_ORIGIN`. `middleware.ts` already serves the marketplace
+at the root of any `store.*` host. Not done yet: it needs access to the `9devs.app` DNS.
 
 ## Build
 
