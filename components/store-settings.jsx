@@ -69,7 +69,7 @@ export function PackageSettings({ theme, dark, card: Card, appMode, canChange, o
       await onChanged?.();
       await load();
       if (body.pending) setMessage({ ok: true, tone: "warn", text: body.note, pending: true });
-      else setMessage({ ok: true, text: `Your business is now on the ${body.label} package.${body.note ? " " + body.note : ""}` });
+      else setMessage({ ok: true, text: `Your business is now on the ${body.label} package.${body.note ? " " + body.note : ""}`, apply: !!body.note && /apply/i.test(body.note) });
     } catch {
       setMessage({ ok: false, text: "Couldn't reach the server. The package was not changed." });
     } finally {
@@ -120,7 +120,7 @@ export function PackageSettings({ theme, dark, card: Card, appMode, canChange, o
       {message && (
         <Notice ok={message.ok} tone={message.tone} theme={theme} dark={dark}>
           {message.text}{" "}
-          {message.pending && <button onClick={onOpenStore} style={{ border: "none", background: "transparent", color: "#2E7D32", fontWeight: 700, cursor: "pointer", padding: 0 }}>Continue seller application</button>}
+          {(message.pending || message.apply) && <button onClick={onOpenStore} style={{ border: "none", background: "transparent", color: "#2E7D32", fontWeight: 700, cursor: "pointer", padding: 0 }}>{message.pending ? "Continue seller application" : "Go to Insight Store"}</button>}
         </Notice>
       )}
 

@@ -351,6 +351,12 @@ export default function InsightSettings() {
             );
           })}
         </nav>
+        {!collapsed && (
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 11, color: "rgba(221,237,226,0.55)" }}>
+            Built by{" "}
+            <a href="https://9devs-seven.vercel.app" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", fontWeight: 600 }}>9DEVs</a>
+          </div>
+        )}
       </aside>
 
       {/* Main */}

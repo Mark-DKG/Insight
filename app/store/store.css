@@ -1,4 +1,7 @@
 /* Insight Store — public marketplace styles. */
+.st, .st *, .st *::before, .st *::after { box-sizing: border-box; }
+.st { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.st button, .st input, .st select, .st textarea { font-family: inherit; }
 .st { --g: #2E7D32; --gd: #145A32; --bg: #F6FAF6; --sf: #fff; --bd: #E3E8E4; --tx: #1F2937; --mu: #5B6B63; --bad: #B3261E; --warn: #B7791F;
   background: var(--bg); color: var(--tx); min-height: 100vh; display: flex; flex-direction: column; font-size: 14px; }
 .st a { color: inherit; text-decoration: none; }
