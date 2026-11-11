@@ -15,13 +15,16 @@ const SCREENS = {
   "admin-dashboard": `import C from "${ROOT}/components/admin/admin-dashboard.jsx"; export default () => <C />;`,
   "admin-businesses": `import C from "${ROOT}/components/admin/admin-businesses.jsx"; export default () => <C />;`,
   "admin-business-detail": `import C from "${ROOT}/components/admin/admin-business-detail.jsx"; export default () => <C businessId="b1" />;`,
+  "admin-store": `import C from "${ROOT}/components/admin/admin-store.jsx"; export default () => <C />;`,
+  "admin-store-application": `import { AdminStoreApplication as C } from "${ROOT}/components/admin/admin-store.jsx"; export default () => <C id="a1" />;`,
 };
 
 const now = new Date().toISOString();
-const ALL = ["businesses.read","businesses.manage","users.read","users.manage","transactions.read","inventory.read","inventory.manage","analytics.read","audit.read","system.monitor","settings.manage","administrators.manage","workspace.access"];
+const ALL = ["businesses.read","businesses.manage","users.read","users.manage","transactions.read","inventory.read","inventory.manage","analytics.read","audit.read","system.monitor","settings.manage","administrators.manage","workspace.access","marketplace.read","marketplace.manage"];
 const biz = { id: "b1", name: "StylinTiq", createdAt: now, status: "ACTIVE", appMode: "INVENTORY_ONLY", currency: "GHS", owner: { name: "Edem", email: "o@x.com" }, userCount: 1, branchCount: 1, lastActivity: now };
 const scenario = (name, perms, opts = {}) => ({
   name,
+  store: storeMock(perms, !!opts.empty),
   me: { admin: { id: "a1", email: "admin@9devs.test", name: "Edem", role: perms === ALL ? "SUPER_ADMIN" : "ANALYST", roleLabel: perms === ALL ? "Super Admin" : "Analyst", mustChangePassword: !!opts.mustChange }, permissions: perms },
   dashboard: {
     range: { days: 30, granularity: "day", since: now },
@@ -46,11 +49,29 @@ const scenario = (name, perms, opts = {}) => ({
     permissions: perms,
   },
 });
+const storeMock = (perms, empty) => ({
+  "/api/admin/store/overview": { applications: empty ? {} : { SUBMITTED: 1, INFO_REQUIRED: 1 }, sellers: empty ? {} : { ACTIVE: 1 }, listings: empty ? {} : { PUBLISHED: 2, SUBMITTED: 1 }, orders30d: empty ? {} : { NEW: 1, COMPLETED: 2 }, completed30d: { count: empty ? 0 : 2, value: empty ? 0 : 300 }, channels: empty ? [] : [{ channel: "whatsapp", event: "SHARE", count: 4 }], config: { isOpen: !empty, announcement: empty ? "Closed for maintenance" : null }, permissions: perms },
+  "/api/admin/store/applications": { applications: empty ? [] : [{ id: "a1", reference: "SA-ABCD2345", status: "SUBMITTED", submittedAt: now, createdAt: now, requestedAppMode: "STORE_INVENTORY", business: { id: "b1", name: "StylinTiq", appMode: "INVENTORY_ONLY" }, _count: { documents: 1 }, city: "Accra", categories: ["Groceries"] }] },
+  "/api/admin/store/applications/a1": { application: { id: "a1", reference: "SA-ABCD2345", status: "UNDER_REVIEW", createdAt: now, submittedAt: now, requestedAppMode: "STORE_INVENTORY", data: { registeredName: "StylinTiq", categories: ["Groceries"], offersDelivery: true },
+      events: [{ id: "e1", action: "SUBMITTED", actorType: "BUSINESS_USER", actorLabel: "Edem", createdAt: now }, { id: "e2", action: "INTERNAL_NOTE", actorType: "PLATFORM_ADMIN", actorLabel: "Admin", note: "Checked registry", internal: true, createdAt: now }],
+      documents: [{ id: "d1", docKey: "registration", fileName: "cert.pdf", mimeType: "application/pdf", sizeBytes: 120000, sha256: "abcdef0123456789", createdAt: now }], applicant: { name: "Edem", email: "o@x.com" },
+      business: { id: "b1", name: "StylinTiq", appMode: "INVENTORY_ONLY", pendingAppMode: "STORE_INVENTORY", status: "ACTIVE", createdAt: now, _count: { products: 2, branches: 1, users: 1 } } },
+    previous: [{ id: "a0", reference: "SA-OLD22222", status: "REJECTED", decisionReason: "Incomplete", decidedAt: now, createdAt: now }], permissions: perms },
+  "/api/admin/store/sellers": { sellers: empty ? [] : [{ id: "s1", slug: "stylintiq", status: "ACTIVE", isFeatured: false, approvedAt: now, city: "Accra", hasWhatsApp: false, liveListings: 2, business: { id: "b1", name: "StylinTiq", appMode: "FULL", status: "ACTIVE", _count: { storeListings: 3, storeOrders: 4 } } },
+    { id: "s2", slug: "kw", status: "SUSPENDED", suspendedReason: "Complaints", isFeatured: true, approvedAt: now, city: null, hasWhatsApp: true, liveListings: 0, business: { id: "b2", name: "Kumasi Weaves", appMode: "STORE_INVENTORY", status: "ACTIVE", _count: { storeListings: 1, storeOrders: 0 } } }] },
+  "/api/admin/store/listings": { listings: empty ? [] : [{ id: "l1", title: "Rice 5kg", status: "SUBMITTED", isFeatured: false, price: null, effectivePrice: 72, available: 40, description: "Rice", rejectionReason: null, images: [{ id: "img1" }], category: { name: "Groceries" }, product: { sku: "RICE-5" }, business: { name: "StylinTiq", currency: "GHS" } },
+    { id: "l2", title: "Scarf", status: "PUBLISHED", isFeatured: true, price: 90, effectivePrice: 90, available: 2, description: null, rejectionReason: null, images: [], category: null, product: { sku: "SC" }, business: { name: "Kumasi Weaves", currency: "GHS" } }] },
+  "/api/admin/store/orders": { orders: empty ? [] : [{ id: "o1", reference: "IS-ABCD2345", status: "NEW", paymentStatus: "UNPAID", currency: "GHS", subtotal: 144, fulfilment: "DELIVERY", createdAt: now, whatsappOpenedAt: null, customerName: "A. M.", business: { id: "b1", name: "StylinTiq" }, _count: { items: 1 } }] },
+  "/api/admin/store/orders/o1": { order: { id: "o1", reference: "IS-ABCD2345", status: "NEW", paymentStatus: "UNPAID", currency: "GHS", subtotal: 144, fulfilment: "DELIVERY", customerName: "Ama Mensah", customerPhone: "233244000000", customerEmail: null, business: { name: "StylinTiq" }, branch: { name: "Main" }, items: [{ id: "i1", quantity: 2, titleSnapshot: "Rice", lineTotal: 144 }], events: [{ id: "e1", action: "PLACED", actorLabel: "Ama", createdAt: now }] } },
+  "/api/admin/store/config": { config: { isOpen: true, announcement: null, orderExpiryHours: 48, requiredDocuments: [{ key: "registration", label: "Registration", required: true }] }, categories: [{ id: "c1", name: "Groceries", slug: "groceries", isActive: true, _count: { listings: 2 } }, { id: "c2", name: "Old", slug: "old", isActive: false, _count: { listings: 0 } }], permissions: perms },
+  "/api/admin/notifications": { items: empty ? [] : [{ id: "pn1", type: "STORE_APPLICATION", title: "New seller application SA-ABCD2345", message: "StylinTiq applied.", link: "/admin/store/applications/a1", isRead: false, createdAt: now }], unread: empty ? 0 : 1, nextCursor: null },
+});
+
 const SCENARIOS = [
   scenario("super-empty", ALL, { empty: true }),
   scenario("super-data", ALL, {}),
   scenario("super-suspended", ALL, { suspended: true }),
-  scenario("analyst", ["analytics.read", "businesses.read"], {}),
+  scenario("analyst", ["analytics.read", "businesses.read", "marketplace.read"], {}),
   scenario("must-change-password", ALL, { mustChange: true }),
 ];
 
@@ -95,7 +116,7 @@ createRoot(document.getElementById("root")).render(<B><Screen /></B>);`);
         page.on("pageerror", (e) => errs.push("pageerror: " + e.message));
         page.on("console", (m) => { if (m.type() === "error" && /\[CRASH\]/.test(m.text())) errs.push(m.text().split("\n").slice(0, 3).join(" | ")); });
         const mock = `window.fetch=async(input,init)=>{const u=typeof input==="string"?input:input.url;const p=u.split("?")[0];const S=${JSON.stringify(sc)};
-          const body=p==="/api/admin/auth/me"?S.me:p==="/api/admin/dashboard"?S.dashboard:p==="/api/admin/businesses"?S.list:p.startsWith("/api/admin/businesses/")?S.detail:p==="/api/admin/auth/login"?{step:"enroll",enrollment:{secret:"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",uri:"otpauth://totp/x"}}:{ok:true};
+          const body=S.store[p]?S.store[p]:p==="/api/admin/auth/me"?S.me:p==="/api/admin/dashboard"?S.dashboard:p==="/api/admin/businesses"?S.list:p.startsWith("/api/admin/businesses/")?S.detail:p==="/api/admin/auth/login"?{step:"enroll",enrollment:{secret:"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",uri:"otpauth://totp/x"}}:{ok:true};
           return new Response(JSON.stringify(body),{status:200,headers:{"Content-Type":"application/json"}});};`;
         const html = `<!doctype html><html><body style="margin:0"><div id="root"></div><script>${mock}</script><script>${fs.readFileSync(path.join(OUT, screen + ".js"), "utf8").replace(/<\/script>/g, "<\\/script>")}</script></body></html>`;
         await page.route("http://h.test/**", (r) => r.fulfill({ contentType: "text/html", body: html }));
