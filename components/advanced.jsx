@@ -228,7 +228,7 @@ export default function InsightAdvanced() {
               return res.ok ? await res.json() : null;
             })
           );
-          data.branchSummaries = summaries.filter(Boolean);
+          data.branchSummaries = summaries.filter((s) => s?.branch && s?.summary);
         }
 
         if (!cancelled) setBizData(data);
@@ -396,7 +396,7 @@ export default function InsightAdvanced() {
                     </thead>
                     <tbody>
                       {bizData
-                        ? (bizData.branchSummaries ?? []).map((b) => ({
+                        ? (bizData.branchSummaries ?? []).filter((b) => b?.branch && b?.summary).map((b) => ({
                             branch: b.branch.name,
                             revenue: b.summary.revenue,
                             profit: b.summary.netProfit,

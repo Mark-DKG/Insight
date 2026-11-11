@@ -267,8 +267,8 @@ export default function InsightPurchases() {
   // with the same field names so the render below never sees a shape it
   // doesn't expect.
   const priceComparisonRows =
-    liveSuppliers && supplierDetail?.supplier?.id === selectedSupplier?.id
-      ? supplierDetail.priceComparison.map((row) => ({
+    liveSuppliers && selectedSupplier && supplierDetail?.supplier?.id === selectedSupplier.id
+      ? (supplierDetail.priceComparison ?? []).map((row) => ({
           name: row.product,
           price: row.currentPrice,
           competitor: row.alternativeSupplier,

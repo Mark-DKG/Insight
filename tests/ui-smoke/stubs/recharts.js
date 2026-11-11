@@ -1,0 +1,17 @@
+import React from 'react';
+const Box=(p)=>React.createElement('div',{'data-chart':'1'},typeof p.children==='function'?null:p.children);
+export const Area=Box;
+export const AreaChart=Box;
+export const Bar=Box;
+export const BarChart=Box;
+export const CartesianGrid=Box;
+export const Cell=Box;
+export const ComposedChart=Box;
+export const Legend=Box;
+export const Line=Box;
+export const Pie=Box;
+export const PieChart=Box;
+export const ResponsiveContainer=Box;
+export const Tooltip=Box;
+export const XAxis=Box;
+export const YAxis=Box;

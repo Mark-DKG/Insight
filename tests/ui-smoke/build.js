@@ -1,0 +1,31 @@
+// Bundles each screen with stubbed icons/charts/router and the mocked API
+// so it can be rendered in headless Chromium without a server or database.
+const esbuild = require("esbuild");
+const fs = require("fs");
+const path = require("path");
+const T = __dirname;
+const ROOT = path.resolve(T, "../..");
+const SCREENS = ["dashboard","pos","sales","inventory","purchases","customers","expenses","reports","advanced","settings"];
+const OUT = path.join(T, ".out");
+fs.mkdirSync(OUT, { recursive: true });
+const alias = { name: "alias", setup(b) {
+  b.onResolve({ filter: /^lucide-react$/ }, () => ({ path: path.join(T, "stubs/lucide.js") }));
+  b.onResolve({ filter: /^recharts$/ }, () => ({ path: path.join(T, "stubs/recharts.js") }));
+  b.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: path.join(T, "stubs/next-navigation.js") }));
+}};
+(async () => {
+  for (const c of SCREENS) {
+    const entry = path.join(OUT, `entry-${c}.jsx`);
+    fs.writeFileSync(entry, `import "../mock.js";
+import React from "react";
+import { createRoot } from "react-dom/client";
+import C from "${path.join(ROOT, "components", c + ".jsx")}";
+class B extends React.Component { constructor(p){super(p);this.state={e:null}} static getDerivedStateFromError(e){return {e}} componentDidCatch(e){console.error("[CRASH] "+e.message+"\\n"+(e.stack||"").split("\\n").slice(0,6).join("\\n"))} render(){return this.state.e?React.createElement("pre",{id:"crash"},String(this.state.e)):this.props.children} }
+createRoot(document.getElementById("root")).render(<B><C /></B>);
+`);
+    await esbuild.build({ entryPoints: [entry], bundle: true, outfile: path.join(OUT, c + ".js"), format: "iife", jsx: "automatic",
+      loader: { ".js": "jsx", ".ts": "ts", ".tsx": "tsx" },
+      nodePaths: (process.env.NODE_PATH || "").split(path.delimiter).filter(Boolean), define: { "process.env.NODE_ENV": '"development"' }, plugins: [alias], logLevel: "error" });
+  }
+  console.log("built", SCREENS.length, "screens");
+})().catch((e) => { console.error(e); process.exit(1); });
