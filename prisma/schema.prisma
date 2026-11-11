@@ -92,6 +92,11 @@ enum NotificationType {
 // Tenant root
 // ----------------------------------------------------------------------------
 
+enum AppMode {
+  FULL
+  INVENTORY_ONLY
+}
+
 model Business {
   id            String   @id @default(uuid())
   name          String
@@ -102,6 +107,14 @@ model Business {
   currency      String   @default("GHS")
   taxRate       Decimal  @default(0) @db.Decimal(5, 2)
   isDemo        Boolean  @default(false)
+  // Counter reserved for sequential receipt numbering.
+  receiptCounter Int     @default(0)
+  // Per-business preferences (inventory, POS, notification settings).
+  settings      Json     @default("{}")
+  // FULL = complete retail management; INVENTORY_ONLY = standalone inventory
+  // software. Disabled modules are enforced server-side in lib/features.ts;
+  // their records are never deleted.
+  appMode       AppMode  @default(FULL)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
