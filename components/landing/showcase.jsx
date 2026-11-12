@@ -75,7 +75,6 @@ export default function Showcase({ signedIn = false }) {
     });
   }
 
-  const next = products[(active + 1) % count];
   const pad = (n) => String(n).padStart(2, "0");
 
   return (
@@ -189,12 +188,12 @@ export default function Showcase({ signedIn = false }) {
           ))}
         </div>
 
-        {/* Edge strip: the colour of the next slide, no imagery. */}
+        {/* Edge strip: the colour of the current product, no imagery. */}
         <div className="lp-edge" aria-hidden="true">
           {products.map((q, i) => (
             <div
               key={q.id}
-              className={`lp-edge-layer${q.id === next.id ? " on" : ""}`}
+              className={`lp-edge-layer${i === active ? " on" : ""}`}
               style={{ background: q.accent }}
             />
           ))}

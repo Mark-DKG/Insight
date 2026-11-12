@@ -36,7 +36,7 @@ export interface ShowcaseProduct {
   h: number;
   /** Descriptive alt text. */
   alt: string;
-  /** Backdrop accent and the spotlight glow behind the product. */
+  /** Side-strip colour (sampled from the product itself) and the spotlight glow. */
   accent: string;
   glow: string;
   /** Optional. Omitted from the page when unset. */
@@ -53,7 +53,7 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Over-Ear Headphones",
     image: "/products/headphones.png", w: 596, h: 784,
     alt: "Urbanista over-ear headphones in deep red, shown at a three-quarter angle",
-    accent: "#B3243C", glow: "rgba(201, 46, 72, 0.34)",
+    accent: "#9E2E44", glow: "rgba(176, 52, 78, 0.34)",
   },
   {
     id: "lacoste-handbags",
@@ -61,7 +61,7 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Handbag & Accessory Set",
     image: "/products/handbag-set.png", w: 734, h: 594,
     alt: "Lacoste handbag set in tan, white and black with a matching clutch, card holder and pouch",
-    accent: "#B5712F", glow: "rgba(214, 142, 70, 0.32)",
+    accent: "#B26A3C", glow: "rgba(200, 128, 80, 0.32)",
   },
   {
     id: "knife-block",
@@ -69,7 +69,7 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Wood-Finish Kitchen Knives",
     image: "/products/knife-block.png", w: 578, h: 746,
     alt: "Block of kitchen knives with wood-grain handles in a matching wooden block",
-    accent: "#8A5232", glow: "rgba(170, 104, 62, 0.32)",
+    accent: "#7E4A38", glow: "rgba(150, 92, 70, 0.32)",
   },
   {
     id: "bow-gown",
@@ -77,7 +77,7 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Fuchsia Evening Dress",
     image: "/products/gown.png", w: 668, h: 882,
     alt: "Fuchsia floor-length gown with a sweetheart neckline and large oversized bow sleeves",
-    accent: "#C21862", glow: "rgba(226, 42, 126, 0.32)",
+    accent: "#E0065A", glow: "rgba(236, 30, 120, 0.32)",
   },
   {
     id: "saint-laurent-heels",
@@ -85,7 +85,7 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Pointed-Toe Pumps",
     image: "/products/heels.png", w: 557, h: 506,
     alt: "Pair of cobalt-blue pointed-toe stiletto pumps marked Saint Laurent Paris",
-    accent: "#1F4FD8", glow: "rgba(52, 104, 240, 0.34)",
+    accent: "#0A5CC8", glow: "rgba(30, 110, 220, 0.34)",
   },
   {
     id: "platform-boots",
@@ -93,6 +93,6 @@ export const SHOWCASE_PRODUCTS: ShowcaseProduct[] = [
     type: "Pink Patent Mid-Calf Boots",
     image: "/products/boots.png", w: 387, h: 679,
     alt: "Pair of glossy pink patent platform boots with a chunky block heel",
-    accent: "#D8337F", glow: "rgba(240, 70, 150, 0.32)",
+    accent: "#DB5788", glow: "rgba(232, 96, 150, 0.32)",
   },
 ];
