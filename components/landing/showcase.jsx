@@ -1,50 +1,59 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Menu, X, ArrowRight } from "lucide-react";
-import { SHOWCASE_PRODUCTS, productTitle } from "../../lib/landing/products";
+import { ChevronLeft, ChevronRight, Menu, X, ArrowRight, Pause, Play } from "lucide-react";
+import { SHOWCASE_PRODUCTS } from "../../lib/landing/products";
 import { NAV_LINKS } from "../../lib/landing/nav";
 
-// The interactive part of the landing page: the accent backdrop, the dark
-// panel, the header, and the product showcase itself.
+// The landing hero: one supplied product at a time, large on the left, its
+// name and details on the right, advancing on a fixed 15 second cadence.
 //
-// Depth here is CSS 3D — perspective, translate3d and rotateY on layered
-// elements, plus pointer parallax and a contact shadow. The supplied products
-// are photographs, not models, so there is no WebGL scene and nothing claims
-// to be one; this renders everywhere, costs no extra bundle, and degrades to a
-// plain image when motion is reduced.
+// Product photographs are shown exactly as supplied — never rotated, skewed or
+// perspective-warped. Depth comes only from a soft cast shadow, a spotlight
+// behind the product, a slow float and gentle pointer parallax (translation
+// only). Under prefers-reduced-motion everything degrades to a plain
+// crossfade; the 15 second cadence itself is preserved and can be paused.
 
-const AUTOPLAY_MS = 7000;
+const INTERVAL_MS = 15000;
 
 export default function Showcase({ signedIn = false }) {
   const products = SHOWCASE_PRODUCTS;
+  const count = products.length;
   const [active, setActive] = useState(0);
-  const [menu, setMenu] = useState(false);
+  const [tick, setTick] = useState(0); // bumps on every manual action → restarts the timer
   const [paused, setPaused] = useState(false);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [menu, setMenu] = useState(false);
+  const [move, setMove] = useState({ x: 0, y: 0 });
   const stage = useRef(null);
   const touch = useRef(null);
-  const userMoved = useRef(false);
 
-  const count = products.length;
   const go = useCallback(
-    (next, byUser = true) => {
-      if (byUser) userMoved.current = true;
-      setActive((i) => ((next ?? i) + count) % count);
+    (next) => {
+      setActive(((next % count) + count) % count);
+      setTick((t) => t + 1);
     },
     [count]
   );
-  const step = useCallback((d) => go((active + d + count) % count), [active, count, go]);
+  const step = useCallback((d) => go(active + d), [active, go]);
+
+  // One timer at a time. The effect re-runs whenever the slide changes (auto
+  // or manual), the visitor pauses/resumes, or a manual action bumps `tick`,
+  // and its cleanup clears the pending timeout first — so timers can neither
+  // overlap nor outlive the component.
+  useEffect(() => {
+    if (paused || count < 2) return;
+    const id = setTimeout(() => setActive((i) => (i + 1) % count), INTERVAL_MS);
+    return () => clearTimeout(id);
+  }, [active, tick, paused, count]);
 
   // Deep link: /?product=<id> opens that slide.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("product");
-    if (!id) return;
-    const i = products.findIndex((p) => p.id === id);
-    if (i >= 0) { userMoved.current = true; setActive(i); }
+    const i = id ? products.findIndex((p) => p.id === id) : -1;
+    if (i >= 0) setActive(i);
   }, [products]);
 
-  // Keyboard navigation while the showcase has focus within it.
+  // Arrow keys while focus is inside the showcase.
   useEffect(() => {
     const el = stage.current;
     if (!el) return;
@@ -56,190 +65,193 @@ export default function Showcase({ signedIn = false }) {
     return () => el.removeEventListener("keydown", onKey);
   }, [step]);
 
-  // Autoplay: only while visible, unpaused, and never after the visitor has
-  // taken control of the showcase themselves.
-  useEffect(() => {
-    if (paused || userMoved.current || count < 2) return;
-    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      setActive((i) => (i + 1) % count);
-    }, AUTOPLAY_MS);
-    return () => clearInterval(id);
-  }, [paused, count, active]);
-
-  // Pointer parallax on the product.
   function onMove(e) {
-    const el = stage.current;
-    if (!el) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width - 0.5;
-    const py = (e.clientY - r.top) / r.height - 0.5;
-    setTilt({ x: Math.max(-1, Math.min(1, px)), y: Math.max(-1, Math.min(1, py)) });
+    const r = stage.current?.getBoundingClientRect();
+    if (!r) return;
+    setMove({
+      x: Math.max(-1, Math.min(1, (e.clientX - r.left) / r.width - 0.5)),
+      y: Math.max(-1, Math.min(1, (e.clientY - r.top) / r.height - 0.5)),
+    });
   }
 
-  const p = products[active];
-  const chips = [p.category, p.sku && `Ref ${p.sku}`, p.price].filter(Boolean);
+  const next = products[(active + 1) % count];
+  const pad = (n) => String(n).padStart(2, "0");
 
   return (
-    <div
-      className="lp-stage"
-      style={{ "--accent": p.accent, "--accent-deep": p.accentDeep, "--glow": p.glow }}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => { setPaused(false); setTilt({ x: 0, y: 0 }); }}
-    >
-      <div className="lp-bg" aria-hidden="true">
-        {products.map((q, i) => (
-          <div
-            key={q.id}
-            className={`lp-bg-layer${i === active ? " on" : ""}`}
-            style={{ backgroundImage: `linear-gradient(152deg, ${q.accent} 0%, ${q.accentDeep} 72%)` }}
-          />
-        ))}
-      </div>
+    <div className="lp-stage">
+      <header className="lp-head">
+        <a className="lp-brand" href="/" aria-label="Insight home">
+          <img src="/brand/insight-logo-light.png" alt="Insight" width={260} height={249} />
+        </a>
 
-      <div className="lp-panel">
-        <header className="lp-head">
-          <a className="lp-brand" href="/" aria-label="Insight home">
-            <img src="/brand/insight-logo-light.png" alt="Insight" width={260} height={249} />
-          </a>
+        <nav className="lp-nav" aria-label="Primary">
+          {NAV_LINKS.map((l) => (
+            <a key={l.label} href={l.href} aria-current={l.href === "/" ? "page" : undefined}>
+              {l.label}
+            </a>
+          ))}
+        </nav>
 
-          <nav className="lp-nav" aria-label="Primary">
-            {NAV_LINKS.map((l) => (
-              <a key={l.label} href={l.href} aria-current={l.href === "/" ? "page" : undefined}>
-                {l.label}
-              </a>
-            ))}
-          </nav>
+        <div className="lp-acts">
+          {signedIn ? (
+            <a className="lp-btn lp-btn-primary" href="/dashboard">Go to Dashboard</a>
+          ) : (
+            <>
+              <a className="lp-btn lp-btn-ghost lp-hide-sm" href="/login">Sign In</a>
+              <a className="lp-btn lp-btn-primary" href="/register">Get Started</a>
+            </>
+          )}
+          <button className="lp-burger" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
+            <Menu size={18} />
+          </button>
+        </div>
+      </header>
 
-          <div className="lp-acts">
-            {signedIn ? (
-              <a className="lp-btn lp-btn-primary" href="/dashboard">Go to Dashboard</a>
-            ) : (
-              <>
-                <a className="lp-btn lp-btn-ghost lp-hide-sm" href="/login">Sign In</a>
-                <a className="lp-btn lp-btn-primary" href="/register">Get Started</a>
-              </>
-            )}
-            <button className="lp-burger" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
-              <Menu size={18} />
-            </button>
-          </div>
-        </header>
-
-        <div
-          className="lp-show"
-          ref={stage}
-          tabIndex={-1}
-          onMouseMove={onMove}
-          onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
-          onTouchEnd={(e) => {
-            if (touch.current == null) return;
-            const dx = e.changedTouches[0].clientX - touch.current;
-            if (Math.abs(dx) > 46) step(dx < 0 ? 1 : -1);
-            touch.current = null;
-          }}
-        >
-          <div className="lp-copy">
-            <div className="lp-arrows">
-              <button className="lp-arrow" onClick={() => step(-1)} aria-label="Previous product" disabled={count < 2}>
-                <ChevronLeft size={17} />
-              </button>
-              <button className="lp-arrow" onClick={() => step(1)} aria-label="Next product" disabled={count < 2}>
-                <ChevronRight size={17} />
-              </button>
-            </div>
-            <h1 className="lp-h1">
-              Run the shop.<br />Sell to the <em>street</em>.
-            </h1>
-            <p className="lp-lede">
-              Insight keeps your stock, your counter and your marketplace listings on one
-              set of numbers — so what you sell in store and what you sell online never
-              disagree about what is left on the shelf.
-            </p>
-            <div className="lp-cta-row">
-              <a className="lp-btn lp-btn-light lp-btn-lg" href="/register">
-                Get Started <ArrowRight size={16} />
-              </a>
-              <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/store">Visit Insight Store</a>
-            </div>
-          </div>
-
-          <div className="lp-stageview">
+      <section
+        className="lp-show"
+        ref={stage}
+        tabIndex={-1}
+        aria-roledescription="carousel"
+        aria-label="Featured products"
+        onMouseMove={onMove}
+        onMouseLeave={() => setMove({ x: 0, y: 0 })}
+        onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          if (touch.current == null) return;
+          const dx = e.changedTouches[0].clientX - touch.current;
+          if (Math.abs(dx) > 46) step(dx < 0 ? 1 : -1);
+          touch.current = null;
+        }}
+      >
+        {/* Spotlight behind the product, one layer per slide, crossfaded. */}
+        <div className="lp-spot" aria-hidden="true">
+          {products.map((q, i) => (
             <div
-              className="lp-tilt"
-              style={{ transform: `rotateY(${tilt.x * 9}deg) rotateX(${-tilt.y * 6}deg) translateZ(0)` }}
-            >
-              <div className="lp-slot">
-                <div className="lp-glow" aria-hidden="true" />
-                {products.map((q, i) => {
-                  const rel = i - active;
-                  return (
-                    <figure
-                      key={q.id}
-                      className={`lp-item${i === active ? " on" : ""}`}
-                      style={{ "--x": `${rel * 58}%`, "--ry": `${rel > 0 ? -16 : 16}deg` }}
-                      aria-hidden={i !== active}
-                    >
-                      <img
-                        src={q.image}
-                        alt={q.alt}
-                        loading={i === 0 ? "eager" : "lazy"}
-                        decoding="async"
-                        draggable="false"
-                      />
-                    </figure>
-                  );
-                })}
-                <div className="lp-floor" aria-hidden="true" />
-              </div>
-            </div>
-          </div>
+              key={q.id}
+              className={`lp-spot-layer${i === active ? " on" : ""}`}
+              style={{ background: `radial-gradient(52% 64% at 30% 52%, ${q.glow}, transparent 72%)` }}
+            />
+          ))}
+        </div>
 
-          <div className="lp-meta">
-            <div aria-live="polite">
-              <div className="lp-eyebrow">Featured on Insight Store</div>
-              <div className="lp-pname">{productTitle(p)}</div>
-              <div className="lp-ptype">{p.type}</div>
-            </div>
-
-            {chips.length > 0 && (
-              <div className="lp-chips">
-                {chips.map((c) => <span className="lp-chip" key={c}>{c}</span>)}
-              </div>
-            )}
-
-            {p.href && (
-              <a className="lp-btn lp-btn-light" href={p.href}>
-                View product <ArrowRight size={15} />
-              </a>
-            )}
-
-            <div className="lp-thumbs" role="tablist" aria-label="Choose a product">
-              {products.map((q, i) => (
-                <button
+        {/* Product — left / centre. */}
+        <div className="lp-product">
+          <div
+            className="lp-parallax"
+            style={{ transform: `translate3d(${(-move.x * 14).toFixed(1)}px, ${(-move.y * 9).toFixed(1)}px, 0)` }}
+          >
+            {products.map((q, i) => {
+              const rel = i === active ? 0 : ((i - active + count) % count) > count / 2 ? -1 : 1;
+              return (
+                <figure
                   key={q.id}
-                  className="lp-thumb"
-                  role="tab"
-                  aria-current={i === active}
-                  aria-selected={i === active}
-                  aria-label={productTitle(q)}
-                  onClick={() => go(i)}
+                  className={`lp-item${i === active ? " on" : ""}`}
+                  style={{ "--dx": rel * 9 }}
+                  aria-hidden={i !== active}
                 >
-                  <img src={q.image} alt="" loading="lazy" decoding="async" />
-                </button>
-              ))}
-            </div>
-            <div className="lp-count">{active + 1} / {count}</div>
+                  <img
+                    src={q.image}
+                    alt={q.alt}
+                    width={q.w}
+                    height={q.h}
+                    loading={i === 0 ? "eager" : "lazy"}
+                    fetchPriority={i === 0 ? "high" : "auto"}
+                    decoding="async"
+                    draggable="false"
+                  />
+                </figure>
+              );
+            })}
           </div>
         </div>
 
-        <p className="lp-tagline">
-          Products listed by approved Insight Store sellers. Stock shown on the marketplace
-          is the stock in their Insight inventory.
+        {/* Product name and information — right. */}
+        <div className="lp-info" aria-live="polite" aria-atomic="true">
+          {products.map((q, i) => (
+            <div key={q.id} className={`lp-info-item${i === active ? " on" : ""}`} aria-hidden={i !== active}>
+              <div className="lp-eyebrow">
+                <span>{pad(i + 1)}</span> / {pad(count)} &nbsp;·&nbsp; Insight Store
+              </div>
+              <h2 className="lp-title">{q.title}</h2>
+              <div className="lp-type">{q.type}</div>
+              <div className="lp-rule" />
+              {q.description && <p className="lp-desc">{q.description}</p>}
+              {q.price && <div className="lp-price">{q.price}</div>}
+              <a className="lp-discover" href={q.href || "/store"} tabIndex={i === active ? 0 : -1}>
+                <span className="lp-disc-ico"><ArrowRight size={16} /></span>
+                <span>
+                  <span className="lp-disc-main">Discover in Insight Store</span>
+                  <span className="lp-disc-sub">Browse the marketplace</span>
+                </span>
+              </a>
+            </div>
+          ))}
+        </div>
+
+        {/* Edge strip: the colour of the next slide, no imagery. */}
+        <div className="lp-edge" aria-hidden="true">
+          {products.map((q, i) => (
+            <div
+              key={q.id}
+              className={`lp-edge-layer${q.id === next.id ? " on" : ""}`}
+              style={{ background: q.accent }}
+            />
+          ))}
+        </div>
+
+        {/* Controls: pagination bottom-left, arrows bottom-right. */}
+        <div className="lp-dots" role="tablist" aria-label="Choose a product">
+          {products.map((q, i) => (
+            <button
+              key={q.id}
+              className="lp-dot"
+              role="tab"
+              aria-selected={i === active}
+              aria-label={`Show ${q.title}`}
+              onClick={() => go(i)}
+            >
+              <span />
+            </button>
+          ))}
+          <span className="lp-prog" aria-hidden="true">
+            <i
+              key={`${active}-${tick}-${paused}`}
+              style={{ animationDuration: `${INTERVAL_MS}ms`, animationPlayState: paused ? "paused" : "running" }}
+            />
+          </span>
+        </div>
+
+        <div className="lp-ctrl">
+          <button className="lp-arrow" onClick={() => setPaused((p) => !p)} aria-label={paused ? "Resume slideshow" : "Pause slideshow"}>
+            {paused ? <Play size={15} /> : <Pause size={15} />}
+          </button>
+          <span className="lp-ctrl-sep" aria-hidden="true" />
+          <button className="lp-arrow" onClick={() => step(-1)} aria-label="Previous product" disabled={count < 2}>
+            <ChevronLeft size={18} />
+          </button>
+          <button className="lp-arrow" onClick={() => step(1)} aria-label="Next product" disabled={count < 2}>
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </section>
+
+      <section className="lp-intro" aria-label="About Insight">
+        <h1 className="lp-h1">
+          Run the shop. Sell to the <em>street</em>.
+        </h1>
+        <p className="lp-lede">
+          Insight keeps your stock, your counter and your marketplace listings on one set of
+          numbers — so what you sell in store and what you sell online never disagree about what
+          is left on the shelf.
         </p>
-      </div>
+        <div className="lp-cta-row">
+          <a className="lp-btn lp-btn-light lp-btn-lg" href="/register">
+            Get Started <ArrowRight size={16} />
+          </a>
+          <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/store">Visit Insight Store</a>
+        </div>
+      </section>
 
       {menu && (
         <div className="lp-sheet" role="dialog" aria-modal="true" aria-label="Menu" onClick={() => setMenu(false)}>
