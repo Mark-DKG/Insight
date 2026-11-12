@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 import { actorLabel, getStoreConfig } from "@/lib/store/server";
-import { applicationTransition, missingApplicationFields, type ApplicationStatus } from "@/lib/store/core";
-import { FIELD_LABELS } from "@/lib/store/application";
+import { applicationTransition, type ApplicationStatus } from "@/lib/store/core";
+import { applicationProblems, missingDocuments, type Documents } from "@/lib/store/application-rules";
 import { notifyBusiness, notifyPlatform } from "@/lib/notify";
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
@@ -22,15 +22,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const to = applicationTransition("submit", app.status as ApplicationStatus, "business");
   if (!to) return NextResponse.json({ error: "This application cannot be submitted in its current state." }, { status: 409 });
 
-  const missing = missingApplicationFields(app.data as Record<string, unknown>);
-  if (missing.length) {
-    return NextResponse.json({ error: `Please complete: ${missing.map((m) => FIELD_LABELS[m] ?? m).join(", ")}.`, missing }, { status: 400 });
+  const data = (app.data ?? {}) as Record<string, unknown>;
+  const problems = applicationProblems(data);
+  if (Object.keys(problems).length) {
+    return NextResponse.json({ error: Object.values(problems)[0], fields: problems }, { status: 400 });
   }
   const config = await getStoreConfig();
-  const required = (config.requiredDocuments as { key: string; label: string; required?: boolean }[]).filter((d) => d.required);
-  const missingDocs = required.filter((d) => !app.documents.some((x) => x.docKey === d.key));
+  const missingDocs = missingDocuments(data, config.requiredDocuments as Documents, app.documents.map((d) => d.docKey));
   if (missingDocs.length) {
-    return NextResponse.json({ error: `Please upload: ${missingDocs.map((d) => d.label).join(", ")}.` }, { status: 400 });
+    return NextResponse.json({ error: `Please upload: ${missingDocs.join(", ")}.` }, { status: 400 });
   }
 
   const response = typeof body?.response === "string" ? body.response.trim().slice(0, 2000) : "";

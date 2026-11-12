@@ -22,6 +22,7 @@ export const ApplicationData = z.object({
   categories: z.array(z.string().trim().max(80)).max(20).optional(),
   productCount: str(40),
   physicalPresence: z.boolean().optional(),
+  shopAddress: str(300),
   onlinePresence: str(300),
   fulfilment: str(300),
   offersDelivery: z.boolean().optional(),

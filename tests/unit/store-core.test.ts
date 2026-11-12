@@ -21,7 +21,7 @@ test("admin can approve submitted / under review", () => { assert.equal(applicat
 test("admin cannot approve a draft or a rejected application", () => { assert.equal(applicationTransition("approve", "DRAFT", "admin"), null); assert.equal(applicationTransition("approve", "REJECTED", "admin"), null); });
 test("approved applications are final", () => { for (const a of ["submit", "withdraw", "reject", "request_info"]) { assert.equal(applicationTransition(a, "APPROVED", "admin"), null); assert.equal(applicationTransition(a, "APPROVED", "business"), null); } });
 test("missing fields are reported", () => assert.ok(missingApplicationFields({ registeredName: "X", categories: [] }).includes("categories")));
-test("complete application has no missing fields", () => assert.deepEqual(missingApplicationFields({ registeredName: "A", businessType: "Retail", description: "d", address: "a", city: "c", region: "r", country: "GH", phone: "1", email: "e@x.com", repName: "n", repPosition: "p", repPhone: "1", repEmail: "e@x.com", categories: ["x"], productCount: "10", fulfilment: "Delivery" }), []));
+test("complete application has no missing fields", () => assert.deepEqual(missingApplicationFields({ registeredName: "A", businessType: "Retail", description: "d", address: "a", city: "c", region: "r", country: "GH", phone: "1", email: "e@x.com", repName: "n", repPosition: "p", repPhone: "1", repEmail: "e@x.com", categories: ["x"], productCount: "10", fulfilment: "Delivery", tradingName: "T", onlinePresence: "x.com" }), []));
 
 console.log("Listings");
 test("seller submits a draft for review", () => assert.equal(listingTransition("submit", "DRAFT", "seller"), "SUBMITTED"));

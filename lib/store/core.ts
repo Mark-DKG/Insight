@@ -23,10 +23,10 @@ export function applicationTransition(action: string, from: ApplicationStatus, b
   return t.to;
 }
 
-/** Fields a business must complete before an application can be submitted. */
+/** Fields a business must complete before an application can be submitted (registration number stays optional). */
 export const REQUIRED_APPLICATION_FIELDS = [
-  "registeredName", "businessType", "description", "address", "city", "region", "country", "phone", "email",
-  "repName", "repPosition", "repPhone", "repEmail", "categories", "productCount", "fulfilment",
+  "registeredName", "tradingName", "businessType", "description", "address", "country", "region", "city", "phone", "email",
+  "repName", "repPosition", "repPhone", "repEmail", "categories", "productCount", "onlinePresence", "fulfilment",
 ] as const;
 
 export function missingApplicationFields(data: Record<string, unknown>): string[] {

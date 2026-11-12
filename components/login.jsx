@@ -87,7 +87,9 @@ export default function InsightLogin({ initialMode = "login" }) {
         return;
       }
 
-      router.push("/dashboard");
+      // New accounts choose their package first; returning users go to the dashboard
+      // (the dashboard sends anyone who still has to choose a package to /choose-package).
+      router.push(mode === "register" ? "/choose-package" : "/dashboard");
       router.refresh();
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");

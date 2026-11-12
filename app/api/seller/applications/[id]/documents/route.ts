@@ -5,6 +5,7 @@ import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 import { readUpload, getStoreConfig } from "@/lib/store/server";
 import { DOCUMENT_MAX_BYTES, DOCUMENT_TYPES } from "@/lib/store/core";
+import { CONDITIONAL_DOC_KEYS } from "@/lib/store/application-rules";
 
 // POST /api/seller/applications/[id]/documents (multipart: file, docKey)
 // Stored privately in the database. Never served from a public URL.
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if ("error" in upload) return NextResponse.json({ error: upload.error }, { status: 400 });
   const docKey = String(upload.form?.get("docKey") ?? "other").slice(0, 40);
   const config = await getStoreConfig();
-  const keys = new Set([...(config.requiredDocuments as { key: string }[]).map((d) => d.key), "other"]);
+  const keys = new Set([...(config.requiredDocuments as { key: string }[]).map((d) => d.key), "other", ...CONDITIONAL_DOC_KEYS]);
   if (!keys.has(docKey)) return NextResponse.json({ error: "Unknown document type." }, { status: 400 });
 
   const doc = await prisma.storeDocument.create({

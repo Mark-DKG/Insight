@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 import { ApplicationData } from "@/lib/store/application";
+import { applicationProblems } from "@/lib/store/application-rules";
 
 // PATCH /api/seller/applications/[id] — save draft answers. Allowed while
 // the application is a draft or when the reviewer asked for more information.
@@ -22,6 +23,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: "This application can no longer be edited." }, { status: 409 });
   }
   const merged = { ...(app.data as object), ...parsed.data };
+  const problems = applicationProblems(merged, { forSubmit: false });
+  if (Object.keys(problems).length) {
+    return NextResponse.json({ error: Object.values(problems)[0], fields: problems }, { status: 400 });
+  }
   const updated = await prisma.storeSellerApplication.update({ where: { id: app.id }, data: { data: merged } });
   return NextResponse.json({ application: updated });
 }

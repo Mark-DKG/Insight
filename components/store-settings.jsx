@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { applicationProblems, conditionalDocuments, isGhana, missingDocuments, APPROVAL_WINDOW, FIELD_NAMES } from "../lib/store/application-rules";
 import { Boxes, Store, ShoppingBag, ShoppingCart, Upload, FileText, Trash2, Check, Clock, AlertTriangle, ExternalLink } from "lucide-react";
 
 // Settings → Business Configuration: the Package selector and the Insight
@@ -82,7 +83,7 @@ export function PackageSettings({ theme, dark, card: Card, appMode, canChange, o
   const to = pkg(pending);
   const losing = to ? features(from).filter((f) => !features(to).includes(f)) : [];
   const gaining = to ? features(to).filter((f) => !features(from).includes(f)) : [];
-  const needsApproval = pending === "STORE_INVENTORY" && !info?.sellerStatus;
+  const needsApproval = (pending === "STORE_INVENTORY" || pending === "FULL") && !info?.sellerStatus;
 
   return (
     <Card style={{ maxWidth: 760 }}>
@@ -200,6 +201,11 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
   const [response, setResponse] = useState("");
+  const [errors, setErrors] = useState({});
+  const [countries, setCountries] = useState([]);
+  const [geo, setGeo] = useState(null);
+  const [otherRegion, setOtherRegion] = useState(false);
+  const [otherCity, setOtherCity] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -217,6 +223,20 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
     load();
     fetch("/api/store/public/categories").then((r) => (r.ok ? r.json() : null)).then((b) => b?.categories && setCategories(b.categories)).catch(() => {});
   }, [load]);
+
+  // Country list once; regions and cities for the chosen country on demand.
+  useEffect(() => {
+    fetch("/geo/index.json").then((r) => (r.ok ? r.json() : [])).then(setCountries).catch(() => {});
+  }, []);
+  useEffect(() => {
+    const entry = countries.find((c) => c.n === form.country);
+    if (!entry) { setGeo(null); return; }
+    let live = true;
+    fetch(`/geo/${entry.f}.json`).then((r) => (r.ok ? r.json() : null)).then((g) => live && setGeo(g)).catch(() => live && setGeo(null));
+    return () => { live = false; };
+  }, [countries, form.country]);
+  const regionNames = (geo?.regions ?? []).map((r) => r.n);
+  const cityNames = (geo?.regions ?? []).find((r) => r.n === form.region)?.c ?? [];
 
   const app = state?.application;
   const editable = app && (app.status === "DRAFT" || app.status === "INFO_REQUIRED") && state?.canApply;
@@ -243,6 +263,19 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
   const start = () => call("start", "/api/seller/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, "Your application has been started. Complete the form below and submit it for review.");
   const save = () => call("save", `/api/seller/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: cleanForm(form) }) }, "Draft saved.");
   async function submit() {
+    // Check everything in the browser first so the applicant sees every problem at once.
+    const data = cleanForm(form);
+    const problems = applicationProblems(data);
+    const docs = missingDocuments(data, (state.requiredDocuments ?? []).filter((d) => d.key !== "owner_id"), (app.documents ?? []).map((d) => d.docKey));
+    if (docs.length) problems.docs = `Please upload: ${docs.join(", ")}.`;
+    setErrors(problems);
+    const keys = Object.keys(problems);
+    if (keys.length) {
+      setMessage({ ok: false, text: `Please fix ${keys.length} ${keys.length === 1 ? "item" : "items"} before submitting. ${keys.length === 1 ? "It is" : "They are"} marked in red.` });
+      const first = keys.find((k) => k !== "docs") ?? "docs";
+      setTimeout(() => document.getElementById(first === "docs" ? "sa-docs" : `sa-${first}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 30);
+      return;
+    }
     const saved = await call("submit", `/api/seller/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: cleanForm(form) }) });
     if (!saved) return;
     await call("submit", `/api/seller/applications/${app.id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ response }) }, "Application submitted. The Insight Store team will review it and you'll be notified of the decision.");
@@ -254,6 +287,10 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
   };
   async function upload(docKey, file) {
     if (!file) return;
+    // Uploading reloads the application from the server, so save the answers first
+    // or anything typed since the last save would be lost.
+    const saved = await call("save", `/api/seller/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: cleanForm(form) }) });
+    if (!saved) return;
     const fd = new FormData();
     fd.append("file", file);
     fd.append("docKey", docKey);
@@ -264,21 +301,73 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
   if (error) return <Card style={{ maxWidth: 760 }}><div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Insight Store</div><Notice ok={false} theme={theme} dark={dark}>{error}</Notice><div style={{ marginTop: 12 }}><Btn kind="ghost" theme={theme} onClick={load}>Try again</Btn></div></Card>;
   if (!state) return <Card style={{ maxWidth: 760 }}><div style={{ fontSize: 13, color: theme.textMuted }}>Loading Insight Store…</div></Card>;
 
-  const field = (k, title, props = {}) => (
-    <div style={{ marginBottom: 14 }}>
-      <label style={label} htmlFor={`sa-${k}`}>{title}{props.optional ? <span style={{ color: theme.textMuted, fontWeight: 500 }}> (optional)</span> : null}</label>
-      {props.options ? (
-        <select id={`sa-${k}`} style={inputStyle} value={form[k] ?? ""} onChange={set(k)} disabled={!editable}>
-          <option value="">Select…</option>
-          {props.options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : props.textarea ? (
-        <textarea id={`sa-${k}`} style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={form[k] ?? ""} onChange={set(k)} disabled={!editable} maxLength={props.max ?? 2000} />
-      ) : (
-        <input id={`sa-${k}`} style={inputStyle} value={form[k] ?? ""} onChange={set(k)} disabled={!editable} type={props.type ?? "text"} maxLength={props.max ?? 160} />
-      )}
-    </div>
+  const ghana = isGhana(form.country);
+  const req = (props) => !props.optional;
+  const errId = (k) => `sa-${k}-err`;
+  const fieldLabel = (k, title, props) => (
+    <label style={label} htmlFor={`sa-${k}`}>{title}{req(props) ? <span style={{ color: "#B3261E" }} aria-hidden="true"> *</span> : <span style={{ color: theme.textMuted, fontWeight: 500 }}> (optional)</span>}</label>
   );
+  const fieldError = (k) => (errors[k] ? <div id={errId(k)} role="alert" style={{ color: "#B3261E", fontSize: 12, marginTop: 4 }}>{errors[k]}</div> : null);
+  const inputBorder = (k) => (errors[k] ? { borderColor: "#B3261E" } : null);
+  const clearErr = (k) => setErrors((e) => { if (!e[k]) return e; const n = { ...e }; delete n[k]; return n; });
+  const checkOne = (k) => {
+    const p = applicationProblems({ ...form, [k]: form[k] }, { forSubmit: false });
+    setErrors((e) => { const n = { ...e }; if (p[k]) n[k] = p[k]; else delete n[k]; return n; });
+  };
+
+  const field = (k, title, props = {}) => {
+    const isPhone = k === "phone" || k === "repPhone";
+    const common = { id: `sa-${k}`, "aria-required": req(props), "aria-invalid": !!errors[k], "aria-describedby": errors[k] ? errId(k) : undefined, disabled: !editable, style: { ...inputStyle, ...inputBorder(k) } };
+    return (
+      <div style={{ marginBottom: 14 }}>
+        {fieldLabel(k, title, props)}
+        {props.options ? (
+          <select {...common} value={form[k] ?? ""} onChange={(e) => { set(k)(e); clearErr(k); }}>
+            <option value="">Select…</option>
+            {props.options.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : props.textarea ? (
+          <textarea {...common} style={{ ...common.style, minHeight: 80, resize: "vertical" }} value={form[k] ?? ""} onChange={(e) => { set(k)(e); clearErr(k); }} maxLength={props.max ?? 2000} />
+        ) : isPhone ? (
+          <input {...common} type="tel" inputMode={ghana ? "numeric" : "tel"} autoComplete="tel" maxLength={ghana ? 10 : 20}
+            placeholder={ghana ? "0241234567" : "+1 555 123 4567"} value={form[k] ?? ""}
+            onChange={(e) => { setForm((f) => ({ ...f, [k]: ghana ? e.target.value.replace(/\D/g, "").slice(0, 10) : e.target.value })); clearErr(k); }}
+            onBlur={() => checkOne(k)} />
+        ) : (
+          <input {...common} value={form[k] ?? ""} onChange={(e) => { set(k)(e); clearErr(k); }} type={props.type ?? "text"}
+            autoComplete={props.type === "email" ? "email" : undefined} onBlur={props.type === "email" ? () => checkOne(k) : undefined} maxLength={props.max ?? 160} />
+        )}
+        {isPhone && ghana && !errors[k] && <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 4 }}>Ghana numbers: digits only, up to 10.</div>}
+        {fieldError(k)}
+      </div>
+    );
+  };
+
+  // Country → region → city. Lists come from /geo; "Other" lets the applicant type
+  // a place the list doesn't have, so nobody is blocked.
+  const OTHER = "__other__";
+  const place = (k, title, names, other, setOther, onPick) => {
+    const value = other || (form[k] && !names.includes(form[k])) ? OTHER : (form[k] ?? "");
+    return (
+      <div style={{ marginBottom: 14 }}>
+        {fieldLabel(k, title, {})}
+        <select id={`sa-${k}`} aria-required="true" aria-invalid={!!errors[k]} style={{ ...inputStyle, ...inputBorder(k) }} disabled={!editable || (k !== "country" && !form.country)} value={value}
+          onChange={(e) => {
+            const v = e.target.value; clearErr(k);
+            if (v === OTHER) { setOther(true); onPick(""); } else { setOther(false); onPick(v); }
+          }}>
+          <option value="">Select…</option>
+          {names.map((n) => <option key={n} value={n}>{n}</option>)}
+          {k !== "country" && <option value={OTHER}>Other (type it in)</option>}
+        </select>
+        {value === OTHER && (
+          <input aria-label={`${title} (type it in)`} style={{ ...inputStyle, marginTop: 8, ...inputBorder(k) }} disabled={!editable} maxLength={80}
+            placeholder={`Type your ${title.toLowerCase()}`} value={form[k] ?? ""} onChange={(e) => { setForm((f) => ({ ...f, [k]: e.target.value })); clearErr(k); }} />
+        )}
+        {fieldError(k)}
+      </div>
+    );
+  };
   const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0 16px" };
   const h = (t) => <div style={{ fontSize: 13.5, fontWeight: 700, margin: "18px 0 10px", paddingTop: 14, borderTop: `1px solid ${theme.border}` }}>{t}</div>;
 
@@ -314,7 +403,7 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
               <Notice ok={false} theme={theme} dark={dark}>Your last application ({app.reference}) was not approved{app.decisionReason ? `: ${app.decisionReason}` : "."} You can apply again.</Notice>
             )}
             <ul style={{ fontSize: 13, margin: "12px 0 14px 18px", padding: 0, lineHeight: 1.7 }}>
-              <li>Apply once; the Insight Store team reviews your business and documents.</li>
+              <li>Apply once; the Insight Store team reviews your business and documents. Review takes {state.approvalWindow ?? APPROVAL_WINDOW}.</li>
               <li>After approval, choose which inventory products to publish. Each listing is reviewed before it goes live.</li>
               <li>Stock comes from your Insight inventory, so nothing is counted twice.</li>
               <li>Customers order through WhatsApp; you confirm, agree payment and fulfil the order yourself.</li>
@@ -351,10 +440,15 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
           <div style={{ fontSize: 14.5, fontWeight: 700 }}>Seller application</div>
           {!editable && <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 4 }}>{state.canApply ? "This application is with the Insight Store team and can't be edited right now." : "Only the business owner can edit the application."}</div>}
 
+          <div style={{ fontSize: 12.5, color: theme.textMuted, margin: "6px 0 0" }}>Fields marked <span style={{ color: "#B3261E" }}>*</span> are required. Only the registration number is optional.</div>
+          <div role="note" style={{ marginTop: 10, fontSize: 12.5, padding: "9px 11px", borderRadius: 6, background: dark ? "#3A2E15" : "#FFF7E6", borderLeft: "3px solid #B7791F", display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <Clock size={14} style={{ marginTop: 1, flexShrink: 0 }} /> <span>Review takes {state.approvalWindow ?? APPROVAL_WINDOW} after you submit. We'll notify you of the decision.</span>
+          </div>
+
           {h("Business details")}
           <div style={grid}>
             {field("registeredName", "Registered business name")}
-            {field("tradingName", "Trading name", { optional: true })}
+            {field("tradingName", "Trading name")}
             {field("registrationNumber", "Registration number", { optional: true, max: 80 })}
             {field("businessType", "Business type", { options: BUSINESS_TYPES })}
           </div>
@@ -363,10 +457,10 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
           {h("Location and contact")}
           {field("address", "Business address", { max: 300 })}
           <div style={grid}>
-            {field("city", "City", { max: 80 })}
-            {field("region", "Region", { max: 80 })}
-            {field("country", "Country", { max: 80 })}
-            {field("phone", "Contact phone", { type: "tel", max: 40 })}
+            {place("country", "Country", countries.map((c) => c.n), false, () => {}, (v) => { setOtherRegion(false); setOtherCity(false); setForm((f) => ({ ...f, country: v, region: "", city: "" })); })}
+            {place("region", "Region", regionNames, otherRegion, setOtherRegion, (v) => { setOtherCity(false); setForm((f) => ({ ...f, region: v, city: "" })); })}
+            {place("city", "City", cityNames, otherCity, setOtherCity, (v) => setForm((f) => ({ ...f, city: v })))}
+            {field("phone", "Contact phone", { type: "tel" })}
             {field("email", "Business email", { type: "email" })}
           </div>
 
@@ -374,42 +468,50 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
           <div style={grid}>
             {field("repName", "Full name", { max: 120 })}
             {field("repPosition", "Position", { max: 80 })}
-            {field("repPhone", "Contact number", { type: "tel", max: 40 })}
+            {field("repPhone", "Contact number", { type: "tel" })}
             {field("repEmail", "Email", { type: "email" })}
           </div>
 
           {h("Products and fulfilment")}
-          <div style={{ marginBottom: 14 }}>
-            <span style={label}>Product categories</span>
+          <div style={{ marginBottom: 14 }} id="sa-categories">
+            <span style={label}>Product categories<span style={{ color: "#B3261E" }} aria-hidden="true"> *</span></span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {(categories.length ? categories.map((c) => c.name) : ["General"]).map((name) => {
                 const on = (form.categories ?? []).includes(name);
                 return (
                   <button key={name} type="button" disabled={!editable} aria-pressed={on}
-                    onClick={() => setForm((f) => ({ ...f, categories: on ? (f.categories ?? []).filter((x) => x !== name) : [...(f.categories ?? []), name] }))}
-                    style={{ fontSize: 12.5, padding: "5px 10px", borderRadius: 14, cursor: editable ? "pointer" : "default", border: `1px solid ${on ? "#2E7D32" : theme.border}`, background: on ? (dark ? "#173C26" : "#E7F5EA") : "transparent", color: on ? "#2E7D32" : theme.text, fontWeight: on ? 700 : 500 }}>
+                    onClick={() => { clearErr("categories"); setForm((f) => ({ ...f, categories: on ? (f.categories ?? []).filter((x) => x !== name) : [...(f.categories ?? []), name] })); }}
+                    style={{ fontSize: 12.5, padding: "5px 10px", borderRadius: 14, cursor: editable ? "pointer" : "default", border: `1px solid ${on ? "#2E7D32" : errors.categories ? "#B3261E" : theme.border}`, background: on ? (dark ? "#173C26" : "#E7F5EA") : "transparent", color: on ? "#2E7D32" : theme.text, fontWeight: on ? 700 : 500 }}>
                     {on && <Check size={11} style={{ marginRight: 4, verticalAlign: -1 }} />}{name}
                   </button>
                 );
               })}
             </div>
+            {fieldError("categories")}
           </div>
           <div style={grid}>
             {field("productCount", "Approximate number of products", { options: PRODUCT_COUNTS })}
-            {field("onlinePresence", "Website or social pages", { optional: true, max: 300 })}
+            {field("onlinePresence", "Website or social pages", { max: 300 })}
           </div>
           {field("fulfilment", "How will you fulfil orders?", { textarea: true, max: 300 })}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13, marginBottom: 6 }}>
             {[["physicalPresence", "We have a physical shop"], ["offersCollection", "Customers can collect"], ["offersDelivery", "We deliver"]].map(([k, t]) => (
               <label key={k} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input type="checkbox" checked={!!form[k]} onChange={set(k)} disabled={!editable} /> {t}
+                <input type="checkbox" checked={!!form[k]} onChange={(e) => { set(k)(e); if (k === "physicalPresence") { clearErr("shopAddress"); setErrors((x) => ({ ...x, docs: undefined })); } }} disabled={!editable} /> {t}
               </label>
             ))}
           </div>
+          {form.physicalPresence && (
+            <div style={{ marginTop: 10 }}>
+              {field("shopAddress", "Physical shop address", { max: 300 })}
+              <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: -6 }}>A photo of your Ghana Card or Voter's ID is also required below.</div>
+            </div>
+          )}
 
           {h("Supporting documents")}
+          <div id="sa-docs">{errors.docs && <div role="alert" style={{ color: "#B3261E", fontSize: 12.5, marginBottom: 8 }}>{errors.docs}</div>}</div>
           <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 10 }}>PDF, PNG or JPEG, up to 5 MB each. Documents are stored privately and only the Insight Store review team can open them.</div>
-          {[...(state.requiredDocuments ?? []), { key: "other", label: "Other supporting document", required: false }].map((d) => {
+          {[...(state.requiredDocuments ?? []).filter((d) => d.key !== "owner_id"), ...conditionalDocuments(form), { key: "other", label: "Other supporting document", required: false }].map((d) => {
             const docs = (app.documents ?? []).filter((x) => x.docKey === d.key);
             return (
               <div key={d.key} style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12, marginBottom: 10 }}>
@@ -489,7 +591,7 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
 }
 
 function cleanForm(f) {
-  const allowed = ["registeredName", "tradingName", "registrationNumber", "businessType", "description", "address", "city", "region", "country", "phone", "email", "repName", "repPosition", "repPhone", "repEmail", "categories", "productCount", "physicalPresence", "onlinePresence", "fulfilment", "offersDelivery", "offersCollection"];
+  const allowed = ["registeredName", "tradingName", "registrationNumber", "businessType", "description", "address", "city", "region", "country", "phone", "email", "repName", "repPosition", "repPhone", "repEmail", "categories", "productCount", "physicalPresence", "onlinePresence", "fulfilment", "offersDelivery", "offersCollection", "shopAddress"];
   const out = {};
   for (const k of allowed) if (f[k] !== undefined && f[k] !== null) out[k] = f[k];
   return out;

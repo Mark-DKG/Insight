@@ -106,6 +106,6 @@ export const config = {
      * registration for signed-out visitors. New public/ folders must be added
      * here too.
      */
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|brand/|products/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|brand/|products/|geo/).*)",
   ],
 };

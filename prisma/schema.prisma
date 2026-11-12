@@ -140,6 +140,9 @@ model Business {
   // blocks sign-in and token refresh; it never deletes business records.
   // Package requested but waiting on Insight Store seller approval.
   pendingAppMode  AppMode?
+  // When the owner first chose a package after signup. NULL = still has to
+  // choose; until then the business runs on the most restricted package.
+  packageSelectedAt DateTime?
   status          BusinessStatus @default(ACTIVE)
   suspendedAt     DateTime?
   suspendedReason String?

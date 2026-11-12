@@ -41,7 +41,9 @@ export async function POST(request: Request) {
 
   const result = await prisma.$transaction(async (tx) => {
     const business = await tx.business.create({
-      data: { name: businessName, currency },
+      // Starts on the most restricted package. The owner picks a real one right after
+      // signing in; until then only inventory is available (enforced server-side).
+      data: { name: businessName, currency, appMode: "INVENTORY_ONLY" },
     });
 
     const branch = await tx.branch.create({

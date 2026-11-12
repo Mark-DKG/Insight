@@ -4,6 +4,7 @@ import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 import { sellerState, getStoreConfig } from "@/lib/store/server";
 import { PACKAGE_LABEL, packageIncludesStore } from "@/lib/features";
+import { APPROVAL_WINDOW, conditionalDocuments } from "@/lib/store/application-rules";
 
 // GET /api/seller/status — everything the Settings → Insight Store panel and
 // the seller area need to decide what to show.
@@ -36,7 +37,8 @@ export async function GET() {
     blockedReason: state.blockedReason,
     application: app,
     history,
-    requiredDocuments: config.requiredDocuments,
+    requiredDocuments: [...(config.requiredDocuments as { key: string }[]), ...conditionalDocuments((app?.data ?? {}) as Record<string, unknown>)],
+    approvalWindow: APPROVAL_WINDOW,
     canApply: requirePermission(session, "store:apply"),
   });
 }
