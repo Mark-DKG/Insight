@@ -7,6 +7,7 @@ import { findCart, cartView, hashToken, REF_COOKIE } from "@/lib/store/cart";
 import { uniqueReference, getStoreConfig, fulfilmentBranchId } from "@/lib/store/server";
 import { splitBySeller, normalizeWhatsApp, buildWhatsAppMessage, whatsAppLink, cleanChannel } from "@/lib/store/core";
 import { notifyBusiness } from "@/lib/notify";
+import { currentShopper } from "@/lib/store/shopper";
 
 const Schema = z.object({
   idempotencyKey: z.string().min(16).max(80),
@@ -67,6 +68,8 @@ export async function POST(request: Request) {
     if (f === "DELIVERY" && !d.deliveryAddress) return NextResponse.json({ error: "Enter a delivery address." }, { status: 400 });
   }
 
+  // Optional: orders placed while signed in to a shopper account are linked to it.
+  const shopper = await currentShopper().catch(() => null);
   const channel = cleanChannel(cookies().get(REF_COOKIE)?.value);
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + config.orderExpiryHours * 3600_000);
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
         const currency = view.lines.find((l) => l.seller.businessId === g.businessId)!.currency;
         const order = await tx.storeOrder.create({
           data: {
-            reference: references[i], checkoutId: checkout.id, businessId: g.businessId, branchId: branches.get(g.businessId) ?? null,
+            reference: references[i], checkoutId: checkout.id, businessId: g.businessId, branchId: branches.get(g.businessId) ?? null, shopperId: shopper?.id ?? null,
             currency, subtotal: g.subtotal, customerName: d.customerName, customerPhone: phone, customerEmail: d.customerEmail || null,
             fulfilment: d.fulfilment[g.businessId], deliveryAddress: d.fulfilment[g.businessId] === "DELIVERY" ? d.deliveryAddress ?? null : null,
             note: d.note || null, lookupTokenHash: tokenHash, expiresAt, attributionChannel: channel, whatsappLinkGeneratedAt: new Date(),

@@ -1038,6 +1038,8 @@ model StoreOrder {
   checkoutId              String
   businessId              String
   branchId                String?
+  // Set when the customer was signed in to an Insight Store account at checkout.
+  shopperId               String?
   status                  StoreOrderStatus   @default(NEW)
   paymentStatus           StorePaymentStatus @default(UNPAID)
   currency                String
@@ -1063,10 +1065,12 @@ model StoreOrder {
 
   business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   branch   Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  shopper  StoreShopper?     @relation(fields: [shopperId], references: [id], onDelete: SetNull)
   items    StoreOrderItem[]
   events   StoreOrderEvent[]
 
   @@index([businessId, status, createdAt])
+  @@index([shopperId, createdAt])
   @@index([checkoutId])
   @@index([status, expiresAt])
 }
@@ -1124,4 +1128,39 @@ model StoreAttributionEvent {
 
   @@index([channel, event, createdAt])
   @@index([businessId, createdAt])
+}
+
+// Insight Store shopper accounts. Entirely separate from business users
+// (User) and platform admins: a shopper can never reach a business app, and a
+// business login is never a shopper login.
+model StoreShopper {
+  id             String    @id @default(uuid())
+  email          String    @unique // stored lower-cased and trimmed
+  passwordHash   String
+  name           String
+  phone          String?
+  defaultAddress String?
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  sessions StoreShopperSession[]
+  orders   StoreOrder[]
+}
+
+// Opaque random token in an httpOnly cookie; only its SHA-256 hash is stored,
+// so a database leak cannot be replayed, and signing out really revokes it.
+model StoreShopperSession {
+  id        String   @id @default(uuid())
+  shopperId String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  shopper StoreShopper @relation(fields: [shopperId], references: [id], onDelete: Cascade)
+
+  @@index([shopperId])
+  @@index([expiresAt])
 }

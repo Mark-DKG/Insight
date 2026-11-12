@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./store.css";
 import { CartBadge } from "@/components/store/store-client";
+import { AccountMenu, ShopperGate } from "@/components/store/shopper";
 import { publicCategories, storeIsOpen } from "@/lib/store/public";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
             <input name="q" placeholder="Search products and sellers" aria-label="Search products and sellers" maxLength={100} />
             <button type="submit">Search</button>
           </form>
+          <AccountMenu />
           <CartBadge />
         </div>
       </header>
@@ -37,6 +39,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
           <div className="st-note">{status.announcement ?? "Insight Store is not taking new orders right now. You can still browse."}</div>
         </div>
       )}
+      <ShopperGate />
       <main className="st-main"><div className="st-wrap">{children}</div></main>
       <footer className="st-foot">
         <div className="st-wrap">

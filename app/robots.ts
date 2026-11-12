@@ -17,7 +17,7 @@ export default function robots(): MetadataRoute.Robots {
           "/api/", "/admin", "/dashboard", "/seller", "/settings", "/pos", "/sales",
           "/inventory", "/products", "/purchases", "/customers", "/suppliers",
           "/expenses", "/reports", "/employees", "/advanced",
-          "/store/cart", "/store/orders/",
+          "/store/cart", "/store/orders/", "/store/account",
         ],
       },
     ],

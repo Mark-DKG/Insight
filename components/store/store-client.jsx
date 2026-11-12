@@ -168,6 +168,11 @@ export function CartPage({ storeOpen, announcement }) {
       const saved = JSON.parse(localStorage.getItem("ist-customer") ?? "null");
       if (saved) setForm((f) => ({ ...f, customerName: saved.customerName ?? "", customerPhone: saved.customerPhone ?? "", customerEmail: saved.customerEmail ?? "", deliveryAddress: saved.deliveryAddress ?? "" }));
     } catch {}
+    // A signed-in shopper's saved details win over the browser's last guest entry.
+    fetch("/api/store/public/account/me", { cache: "no-store" }).then((r) => r.json()).then((b) => {
+      const u = b.shopper;
+      if (u) setForm((f) => ({ ...f, customerName: u.name || f.customerName, customerPhone: u.phone || f.customerPhone, customerEmail: u.email || f.customerEmail, deliveryAddress: u.defaultAddress || f.deliveryAddress }));
+    }).catch(() => {});
   }, [load]);
 
   const groups = React.useMemo(() => {
@@ -364,9 +369,9 @@ export function OrderStatus({ reference }) {
       try { t = new URLSearchParams((JSON.parse(localStorage.getItem("ist-orders") ?? "[]").find((o) => o.reference === reference)?.path ?? "").split("?")[1] ?? "").get("t"); } catch {}
     }
     setToken(t);
-    if (!t) { setError("Open this page from the tracking link in your order confirmation."); return; }
-    fetch(`/api/store/public/orders/${encodeURIComponent(reference)}?t=${encodeURIComponent(t)}`)
-      .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) setError(b.error ?? "Order not found."); else setOrder(b.order); })
+    // Without a link token the server only answers for the signed-in owner.
+    fetch(`/api/store/public/orders/${encodeURIComponent(reference)}${t ? `?t=${encodeURIComponent(t)}` : ""}`)
+      .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) setError(t ? (b.error ?? "Order not found.") : "Open this page from the tracking link in your order confirmation, or sign in to the account that placed the order."); else setOrder(b.order); })
       .catch(() => setError("You're offline. Connect to see the latest status."));
   }, [reference]);
 
@@ -387,7 +392,7 @@ export function OrderStatus({ reference }) {
         {!closed && order.whatsappUrl && (
           <div style={{ marginTop: 12 }}>
             <a className="st-btn wa" href={order.whatsappUrl} target="_blank" rel="noopener noreferrer"
-              onClick={() => fetch(`/api/store/public/orders/${order.reference}/whatsapp?t=${encodeURIComponent(token)}`, { method: "POST", keepalive: true }).catch(() => {})}>
+              onClick={() => fetch(`/api/store/public/orders/${order.reference}/whatsapp${token ? `?t=${encodeURIComponent(token)}` : ""}`, { method: "POST", keepalive: true }).catch(() => {})}>
               {order.whatsappOpenedAt ? "Message the seller on WhatsApp" : "Send order on WhatsApp"}
             </a>
           </div>
