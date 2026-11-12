@@ -22,3 +22,10 @@ select,
 textarea {
   font-family: inherit;
 }
+
+/* Text hygiene, app-wide: no iOS font inflation, balanced headings, and long
+   unbroken strings (emails, SKUs, URLs) wrap instead of overflowing cards. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+td, th, li, p { overflow-wrap: anywhere; }

@@ -68,7 +68,7 @@ html { scroll-behavior: smooth; }
 }
 .lp-nav a:hover { color: var(--fg); background: rgba(255, 255, 255, 0.07); }
 .lp-nav a[aria-current="page"] { color: var(--ink); background: #fff; font-weight: 600; }
-.lp-acts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.lp-acts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 .lp-burger {
   display: none; background: transparent; border: 1px solid var(--line);
   border-radius: 10px; padding: 9px; color: var(--fg); cursor: pointer;
