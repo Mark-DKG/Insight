@@ -113,7 +113,7 @@ async function main() {
   for (const [label, body] of [
     ["short password", { name: "Kofi Boateng", email, password: "abc123" }],
     ["common password", { name: "Kofi Boateng", email, password: "password123" }],
-    ["password containing the email", { name: "Kofi Boateng", email, password: `${email.split("@")[0]}99` }],
+    ["password equal to the email", { name: "Kofi Boateng", email, password: email.toLowerCase() }],
     ["bad email", { name: "Kofi Boateng", email: "nope", password: PW }],
     ["bad phone", { name: "Kofi Boateng", email, password: PW, phone: "12" }],
     ["no name", { name: "", email, password: PW }],
