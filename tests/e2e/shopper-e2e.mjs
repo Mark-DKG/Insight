@@ -84,6 +84,8 @@ async function main() {
   await S.patch(`/api/seller/applications/${appId}`, { data: GOOD });
   const fd = file(PDF, "reg.pdf", "application/pdf"); fd.append("docKey", "registration");
   await S.post(`/api/seller/applications/${appId}/documents`, fd);
+  const idDoc = file(PNG, "ghana-card.png", "image/png"); idDoc.append("docKey", "owner_id");
+  await S.post(`/api/seller/applications/${appId}/documents`, idDoc);
   const sub = await S.post(`/api/seller/applications/${appId}/submit`, {});
   check("setup: seller application submitted", sub.status === 200, sub.data);
   const admin = await client("admin");
