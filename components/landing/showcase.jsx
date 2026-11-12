@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Menu, X, ArrowRight, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowRight, Pause, Play } from "lucide-react";
 import { SHOWCASE_PRODUCTS } from "../../lib/landing/products";
-import { NAV_LINKS } from "../../lib/landing/nav";
 
 // The landing hero: one supplied product at a time, large on the left, its
 // name and details on the right, advancing on a fixed 15 second cadence.
@@ -16,13 +15,12 @@ import { NAV_LINKS } from "../../lib/landing/nav";
 
 const INTERVAL_MS = 15000;
 
-export default function Showcase({ signedIn = false }) {
+export default function Showcase() {
   const products = SHOWCASE_PRODUCTS;
   const count = products.length;
   const [active, setActive] = useState(0);
   const [tick, setTick] = useState(0); // bumps on every manual action → restarts the timer
   const [paused, setPaused] = useState(false);
-  const [menu, setMenu] = useState(false);
   const [move, setMove] = useState({ x: 0, y: 0 });
   const stage = useRef(null);
   const touch = useRef(null);
@@ -79,34 +77,6 @@ export default function Showcase({ signedIn = false }) {
 
   return (
     <div className="lp-stage">
-      <header className="lp-head">
-        <a className="lp-brand" href="/" aria-label="Insight home">
-          <img src="/brand/insight-logo-light.png" alt="Insight" width={260} height={249} />
-        </a>
-
-        <nav className="lp-nav" aria-label="Primary">
-          {NAV_LINKS.map((l) => (
-            <a key={l.label} href={l.href} aria-current={l.href === "/" ? "page" : undefined}>
-              {l.label}
-            </a>
-          ))}
-        </nav>
-
-        <div className="lp-acts">
-          {signedIn ? (
-            <a className="lp-btn lp-btn-primary" href="/dashboard">Go to Dashboard</a>
-          ) : (
-            <>
-              <a className="lp-btn lp-btn-ghost lp-hide-sm" href="/login">Sign In</a>
-              <a className="lp-btn lp-btn-primary" href="/register">Get Started</a>
-            </>
-          )}
-          <button className="lp-burger" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu}>
-            <Menu size={18} />
-          </button>
-        </div>
-      </header>
-
       <section
         className="lp-show"
         ref={stage}
@@ -252,33 +222,6 @@ export default function Showcase({ signedIn = false }) {
         </div>
       </section>
 
-      {menu && (
-        <div className="lp-sheet" role="dialog" aria-modal="true" aria-label="Menu" onClick={() => setMenu(false)}>
-          <div className="lp-sheet-in" onClick={(e) => e.stopPropagation()}>
-            <div className="lp-sheet-hd">
-              <img src="/brand/insight-logo-light.png" alt="Insight" style={{ height: 30, width: "auto" }} />
-              <button className="lp-arrow" onClick={() => setMenu(false)} aria-label="Close menu">
-                <X size={17} />
-              </button>
-            </div>
-            <nav aria-label="Mobile">
-              {NAV_LINKS.map((l) => (
-                <a key={l.label} href={l.href} onClick={() => setMenu(false)}>{l.label}</a>
-              ))}
-            </nav>
-            <div className="lp-cta-row">
-              {signedIn ? (
-                <a className="lp-btn lp-btn-primary lp-btn-lg" href="/dashboard">Go to Dashboard</a>
-              ) : (
-                <>
-                  <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/login">Sign In</a>
-                  <a className="lp-btn lp-btn-primary lp-btn-lg" href="/register">Get Started</a>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import "./landing.css";
 import Showcase from "@/components/landing/showcase";
+import LandingHeader from "@/components/landing/header";
 import { NAV_LINKS } from "@/lib/landing/nav";
 import { siteOrigin } from "@/lib/store/origin";
 import { verifyAccessToken } from "@/lib/jwt";
@@ -53,6 +54,9 @@ const Dash = () => (
     strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
 );
 
+/** Year the product was built. A fixed value on purpose — it is not "this year". */
+const BUILT_YEAR = 2026;
+
 const FEATURES = [
   { t: "Inventory Management", d: "Products, stock levels, adjustments and transfers, with every movement recorded and attributable.", i: "M20 7 12 3 4 7v10l8 4 8-4V7Z M4 7l8 4 8-4 M12 11v10" },
   { t: "Point of Sale", d: "A till that keeps selling when the internet drops. Sales queue on the device and sync once, never twice.", i: "M3 10h18 M5 6h14l2 14H3L5 6Z M9 14h6" },
@@ -90,7 +94,8 @@ export default async function LandingPage() {
   return (
     <div className="lp">
       <a href="#features" className="lp-sr">Skip to content</a>
-      <Showcase signedIn={signedIn} />
+      <LandingHeader signedIn={signedIn} />
+      <Showcase />
 
       {/* ------------------------------------------------ Features */}
       <section className="lp-sec" id="features">
@@ -133,9 +138,6 @@ export default async function LandingPage() {
               </li>
             ))}
           </ol>
-          <div className="lp-cta-row" style={{ marginTop: 28 }}>
-            <a className="lp-btn lp-btn-primary lp-btn-lg" href="/register">Create an account</a>
-          </div>
         </div>
       </section>
 
@@ -149,7 +151,7 @@ export default async function LandingPage() {
             business can use, and an owner changes it in Settings at any time. Switching
             package only hides modules — records are kept and come back if you switch back.
           </p>
-          <div className="lp-grid lp-g2">
+          <div className="lp-grid lp-g4">
             {PACKAGES.map((p) => (
               <div className={`lp-pkg${p.feat ? " feat" : ""}`} key={p.n}>
                 <h3>{p.n}</h3>
@@ -158,9 +160,6 @@ export default async function LandingPage() {
                   {p.on.map((x) => <li key={x}><Check />{x}</li>)}
                   {p.off.map((x) => <li className="off" key={x}><Dash />{x}</li>)}
                 </ul>
-                <a className={`lp-btn ${p.feat ? "lp-btn-primary" : "lp-btn-ghost"}`} href="/register">
-                  Get Started
-                </a>
               </div>
             ))}
           </div>
@@ -181,11 +180,11 @@ export default async function LandingPage() {
           <p className="lp-kicker">Insight Store</p>
           <h2 className="lp-h2">One marketplace, every approved seller.</h2>
           <p className="lp-sub">
-            Insight Store is a single central marketplace — not a website builder. Sellers do
-            not get their own shop domain; they get a seller profile and listings inside one
-            storefront that shoppers browse without an account.
+            Insight Store is the centralized marketplace where sellers set up and showcase
+            the products of their choosing. Every visitor can browse the store as a guest, or
+            create an Insight Store user account with their email.
           </p>
-          <div className="lp-grid lp-g2">
+          <div className="lp-grid lp-g22">
             <article className="lp-card">
               <h3>Approval before selling</h3>
               <p>
@@ -219,9 +218,6 @@ export default async function LandingPage() {
               </p>
             </article>
           </div>
-          <div className="lp-cta-row" style={{ marginTop: 30 }}>
-            <a className="lp-btn lp-btn-light lp-btn-lg" href="/store">Browse Insight Store</a>
-          </div>
         </div>
       </section>
 
@@ -230,33 +226,29 @@ export default async function LandingPage() {
         <div className="lp-wrap">
           <p className="lp-kicker">About us</p>
           <h2 className="lp-h2">Built for shops that outgrew the notebook.</h2>
-          <div className="lp-grid lp-g2">
-            <div>
-              <p className="lp-sub" style={{ marginTop: 0 }}>
-                Insight is retail software for businesses whose stock lives in more
-                than one place and whose sales happen in more than one way. The problem it
-                addresses is a familiar one: the counter knows one number, the stockroom knows
-                another, and the online listing knows a third.
-              </p>
-              <p className="lp-sub">
-                So Insight keeps one record. A sale at the till, a transfer between branches,
-                a purchase received and an order from the marketplace all move the same stock.
-                It works offline because connectivity is not a given, and it is built in
-                modules because not every business needs every part on day one.
-              </p>
-            </div>
-            <div>
-              <p className="lp-sub" style={{ marginTop: 0 }}>
-                The aim is that a business owner can answer the questions that actually matter
-                — what do I have, what sells, what did it cost me, who owes me — without
-                reconciling three places first.
-              </p>
-              <p className="lp-sub">
-                Insight Store extends that to reach: once a business already keeps accurate
-                stock in Insight, letting shoppers find those products should not mean
-                maintaining a second catalogue somewhere else.
-              </p>
-            </div>
+          <div className="lp-prose">
+            <p>
+              Insight is a retail software platform for businesses whose stock lives in more
+              than one place and whose sales happen in more than one way. The problem it
+              addresses is a familiar one: the counter knows one number, the stockroom knows
+              another, and the online listing knows a third.
+            </p>
+            <p>
+              So Insight keeps one record. A sale at the till, a transfer between branches, a
+              purchase received and an order from the marketplace all move the same stock. It
+              works perfectly offline thanks to its offline mode and synchronization, and it is
+              built in modules, designed to work for your business from day one.
+            </p>
+            <p>
+              The aim is that a business owner can answer the questions that actually matter —
+              what do I have, what sells, what did it cost me, who owes me — without
+              reconciling three places first.
+            </p>
+            <p>
+              Insight Store extends that reach: once a business already keeps accurate stock in
+              Insight, letting shoppers find those products should not mean maintaining a
+              second catalogue somewhere else.
+            </p>
           </div>
         </div>
       </section>
@@ -304,7 +296,9 @@ export default async function LandingPage() {
             </div>
           </div>
           <div className="lp-foot-bar">
-            <span><strong>Insight by 9DEVs</strong></span>
+            <span>
+              &copy; {BUILT_YEAR} <strong>Insight by 9DEVs</strong>. All rights reserved.
+            </span>
             <span>
               Built by{" "}
               <a href="https://9devs-seven.vercel.app" target="_blank" rel="noopener noreferrer">9DEVs</a>
