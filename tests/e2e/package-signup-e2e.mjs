@@ -106,7 +106,7 @@ check("seller listing API blocked until approved", (await st.c.get("/api/seller/
 check("POS still blocked on a store-only hold", (await st.c.get("/api/sales")).status === 403);
 // While waiting for approval the owner can reach NOTHING but the application and package screens.
 check("mode API says the business is locked", m.data.locked === true, m.data);
-for (const [name, path] of [["products", "/api/products"], ["inventory movements", "/api/inventory/movements"], ["suppliers", "/api/suppliers"], ["purchases", "/api/purchases"], ["reports", "/api/reports/profit"], ["customers", "/api/customers"], ["expenses", "/api/expenses"], ["employees", "/api/employees"], ["branches", "/api/branches"]]) {
+for (const [name, path] of [["products", "/api/products"], ["inventory movements", "/api/inventory/movements"], ["suppliers", "/api/suppliers"], ["purchases", "/api/purchases"], ["reports", "/api/reports/profit"], ["customers", "/api/customers"], ["expenses", "/api/expenses"], ["employees", "/api/employees"], ["branches", "/api/branches"], ["business profile", "/api/business"]]) {
   const rr = await st.c.get(path);
   check(`locked: ${name} API refused`, rr.status === 403, { path, status: rr.status });
 }

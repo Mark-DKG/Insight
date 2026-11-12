@@ -10,6 +10,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
+  if (session.locked) {
+    return NextResponse.json({ error: "Your account is waiting for Insight Store approval.", code: "AWAITING_APPROVAL" }, { status: 403 });
+  }
   const business = await prisma.business.findUnique({
     where: { id: session.businessId },
     select: { id: true, name: true, address: true, phone: true, email: true, currency: true, taxRate: true },

@@ -9,6 +9,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
+  if (session.locked) {
+    return NextResponse.json({ error: "Your account is waiting for Insight Store approval.", code: "AWAITING_APPROVAL" }, { status: 403 });
+  }
 
   const branches = await prisma.branch.findMany({
     where: tenantScope(session),
