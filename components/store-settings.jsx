@@ -308,7 +308,7 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
     <label style={label} htmlFor={`sa-${k}`}>{title}{req(props) ? <span style={{ color: "#B3261E" }} aria-hidden="true"> *</span> : <span style={{ color: theme.textMuted, fontWeight: 500 }}> (optional)</span>}</label>
   );
   const fieldError = (k) => (errors[k] ? <div id={errId(k)} role="alert" style={{ color: "#B3261E", fontSize: 12, marginTop: 4 }}>{errors[k]}</div> : null);
-  const inputBorder = (k) => (errors[k] ? { borderColor: "#B3261E" } : null);
+  const inputBorder = (k) => (errors[k] ? { border: "1px solid #B3261E" } : null);
   const clearErr = (k) => setErrors((e) => { if (!e[k]) return e; const n = { ...e }; delete n[k]; return n; });
   const checkOne = (k) => {
     const p = applicationProblems({ ...form, [k]: form[k] }, { forSubmit: false });
@@ -329,7 +329,7 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
         ) : props.textarea ? (
           <textarea {...common} style={{ ...common.style, minHeight: 80, resize: "vertical" }} value={form[k] ?? ""} onChange={(e) => { set(k)(e); clearErr(k); }} maxLength={props.max ?? 2000} />
         ) : isPhone ? (
-          <input {...common} type="tel" inputMode={ghana ? "numeric" : "tel"} autoComplete="tel" maxLength={ghana ? 10 : 20}
+          <input {...common} type="tel" inputMode={ghana ? "numeric" : "tel"} autoComplete="tel" maxLength={ghana ? undefined : 20}
             placeholder={ghana ? "0241234567" : "+1 555 123 4567"} value={form[k] ?? ""}
             onChange={(e) => { setForm((f) => ({ ...f, [k]: ghana ? e.target.value.replace(/\D/g, "").slice(0, 10) : e.target.value })); clearErr(k); }}
             onBlur={() => checkOne(k)} />
