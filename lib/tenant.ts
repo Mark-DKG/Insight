@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, verifyAccessToken, type SessionClaims } from "./auth";
+import { prisma } from "./prisma";
 
 /**
  * Reads and verifies the access-token cookie for the current request.
@@ -10,7 +11,12 @@ import { AUTH_COOKIE, verifyAccessToken, type SessionClaims } from "./auth";
 export async function getSession(): Promise<SessionClaims | null> {
   const token = cookies().get(AUTH_COOKIE)?.value;
   if (!token) return null;
-  return verifyAccessToken(token);
+  const claims = await verifyAccessToken(token);
+  if (!claims) return null;
+  // Checked on every request (not stored in the token) so approval and the
+  // initial lock take effect immediately.
+  const b = await prisma.business.findUnique({ where: { id: claims.businessId }, select: { awaitingApproval: true } });
+  return b?.awaitingApproval ? { ...claims, locked: true } : claims;
 }
 
 /**

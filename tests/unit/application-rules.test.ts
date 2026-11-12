@@ -53,20 +53,24 @@ test("physical shop needs a shop address", () => {
   assert.deepEqual(applicationProblems({ ...good, physicalPresence: true, shopAddress: "Stall 4, Kejetia Market" }), {});
   assert.equal(applicationProblems({ ...good, physicalPresence: false }).shopAddress, undefined);
 });
-test("physical shop needs a Ghana Card or Voter's ID photo", () => {
-  assert.deepEqual(conditionalDocuments({ physicalPresence: false }), []);
-  const docs = conditionalDocuments({ physicalPresence: true });
-  assert.equal(docs.length, 1);
-  assert.equal(docs[0].required, true);
-  assert.match(docs[0].label, /Ghana Card or Voter's ID/);
-  assert.deepEqual(missingDocuments({ physicalPresence: true }, [], []), [docs[0].label]);
-  assert.deepEqual(missingDocuments({ physicalPresence: true }, [], ["owner_id"]), []);
-  assert.deepEqual(missingDocuments({}, [], []), []);
+test("every application needs a Ghana Card or Voter's ID photo, shop or not", () => {
+  for (const data of [{ physicalPresence: false }, { physicalPresence: true }, {}]) {
+    const docs = conditionalDocuments(data);
+    assert.equal(docs.length, 1);
+    assert.equal(docs[0].required, true);
+    assert.match(docs[0].label, /Ghana Card or Voter's ID/);
+    assert.deepEqual(missingDocuments(data, [], []), [docs[0].label]);
+    assert.deepEqual(missingDocuments(data, [], ["owner_id"]), []);
+  }
+});
+test("a configured owner_id document is not listed twice", () => {
+  const cfg = [{ key: "owner_id", label: "ID", required: true }];
+  assert.deepEqual(missingDocuments({}, cfg, []), ["Photo of your Ghana Card or Voter's ID"]);
 });
 test("configured required documents still apply", () => {
   const cfg = [{ key: "reg_cert", label: "Registration certificate", required: true }, { key: "tax", label: "Tax ID", required: false }];
-  assert.deepEqual(missingDocuments({}, cfg, []), ["Registration certificate"]);
-  assert.deepEqual(missingDocuments({ physicalPresence: true }, cfg, ["reg_cert"]), ["Photo of your Ghana Card or Voter's ID"]);
+  assert.deepEqual(missingDocuments({}, cfg, []), ["Registration certificate", "Photo of your Ghana Card or Voter's ID"]);
+  assert.deepEqual(missingDocuments({}, cfg, ["reg_cert"]), ["Photo of your Ghana Card or Voter's ID"]);
 });
 
 console.log(`\n${passed} passed`);

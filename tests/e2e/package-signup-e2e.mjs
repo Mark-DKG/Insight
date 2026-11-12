@@ -104,13 +104,24 @@ check("status states the 2 to 18 day window", s.data.approvalWindow === "2 to 18
 check("store selling is blocked until approved", s.data.canSell === false);
 check("seller listing API blocked until approved", (await st.c.get("/api/seller/listings")).status === 403);
 check("POS still blocked on a store-only hold", (await st.c.get("/api/sales")).status === 403);
+// While waiting for approval the owner can reach NOTHING but the application and package screens.
+check("mode API says the business is locked", m.data.locked === true, m.data);
+for (const [name, path] of [["products", "/api/products"], ["inventory movements", "/api/inventory/movements"], ["suppliers", "/api/suppliers"], ["purchases", "/api/purchases"], ["reports", "/api/reports/profit"], ["customers", "/api/customers"], ["expenses", "/api/expenses"], ["employees", "/api/employees"], ["branches", "/api/branches"]]) {
+  const rr = await st.c.get(path);
+  check(`locked: ${name} API refused`, rr.status === 403, { path, status: rr.status });
+}
+check("locked: cannot create a product", (await st.c.post("/api/products", { name: "X", sku: "X1", costPrice: 1, sellingPrice: 2, minStockLevel: 1 })).status === 403);
+check("locked: application status is still reachable", (await st.c.get("/api/seller/status")).status === 200);
+check("locked: sign-in identity still reachable", (await st.c.get("/api/auth/me")).data?.locked === true);
 const appId = s.data.application.id;
 
 const full = await newOwner("full");
 r = await full.c.put("/api/business/mode", { mode: "FULL", confirm: true });
 check("Full is held pending too", r.status === 200 && r.data.pending === "FULL", r.data);
-check("Full holds on POS and Inventory (no store)", r.data.mode === "POS_INVENTORY", r.data);
-check("POS available while Full awaits approval", (await full.c.get("/api/sales")).status === 200);
+check("Full is also locked: holding package is the restricted one", r.data.mode === "INVENTORY_ONLY", r.data);
+check("POS blocked while Full awaits approval", (await full.c.get("/api/sales")).status === 403);
+check("inventory blocked while Full awaits approval", (await full.c.get("/api/products")).status === 403);
+check("Full owner is marked locked", (await full.c.get("/api/business/mode")).data?.locked === true);
 check("store blocked while Full awaits approval", (await full.c.get("/api/seller/listings")).status === 403);
 
 // ---------------------------------------------------------------- application rules
@@ -139,8 +150,13 @@ for (const k of required) {
 }
 check("every box except registration number is compulsory", allRequired, notEnforced);
 r = await st.c.patch(A, { data: { ...GOOD, registrationNumber: "" } });
-r = await st.c.post(`${A}/submit`, {}); // not physical; no config docs
+r = await st.c.post(`${A}/submit`, {}); // no shop, no ID yet
+check("ID photo is compulsory even without a physical shop", r.status === 400 && /Ghana Card or Voter's ID/.test(r.data.error ?? ""), r.data);
+r = await st.c.post(`${A}/documents`, (() => { const fd = png("ghana-card.png"); fd.append("docKey", "owner_id"); return fd; })());
+check("ID photo uploads", r.status === 201, r.data);
+r = await st.c.post(`${A}/submit`, {});
 check("registration number is optional (application submits without it)", r.status === 200 && r.data.application?.status === "SUBMITTED", r.data);
+check("still locked after submitting", (await st.c.get("/api/products")).status === 403);
 
 // physical shop rules on the "full" owner's application
 s = await full.c.get("/api/seller/status");
@@ -162,7 +178,7 @@ check("submitted application can't be edited", r.status === 409);
 
 // still waiting after submit
 m = await full.c.get("/api/business/mode");
-check("package still pending after submit (needs approval)", m.data.pendingMode === "FULL" && m.data.mode === "POS_INVENTORY", m.data);
+check("package still pending after submit (needs approval)", m.data.pendingMode === "FULL" && m.data.mode === "INVENTORY_ONLY" && m.data.locked === true, m.data);
 check("store still blocked after submit", (await full.c.get("/api/seller/listings")).status === 403);
 
 // Unknown doc key still refused
@@ -171,6 +187,33 @@ await x.c.put("/api/business/mode", { mode: "STORE_INVENTORY", confirm: true });
 const xs = await x.c.get("/api/seller/status");
 r = await x.c.post(`/api/seller/applications/${xs.data.application.id}/documents`, (() => { const fd = png("a.png"); fd.append("docKey", "bogus"); return fd; })());
 check("unknown document type refused", r.status === 400);
+
+// A locked owner can choose a package that needs no approval, which unlocks the app.
+r = await x.c.put("/api/business/mode", { mode: "POS_INVENTORY", confirm: true });
+check("locked owner can switch to a package without the store", r.status === 200 && r.data.mode === "POS_INVENTORY" && !r.data.pending, r.data);
+m = await x.c.get("/api/business/mode");
+check("switching unlocks the app", m.data.locked === false && (await x.c.get("/api/products")).status === 200, m.data);
+
+// Approval unlocks (needs a disposable platform admin: ADMIN_EMAIL / ADMIN_PASSWORD).
+if (process.env.ADMIN_EMAIL) {
+  const { createHmac } = await import("node:crypto");
+  const b32 = (s) => { const Al = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; let bits = 0, val = 0; const o = []; for (const ch of s.replace(/=+$/, "").toUpperCase()) { val = (val << 5) | Al.indexOf(ch); bits += 5; if (bits >= 8) { o.push((val >>> (bits - 8)) & 255); bits -= 8; } } return Buffer.from(o); };
+  const totp = (secret) => { const c = Buffer.alloc(8); c.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000))); const h = createHmac("sha1", b32(secret)).update(c).digest(); const o = h[h.length - 1] & 15; return String(((h.readUInt32BE(o) & 0x7fffffff) % 1e6)).padStart(6, "0"); };
+  const admin = await bypass();
+  const s1 = await admin.post("/api/admin/auth/login", { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD });
+  const s2 = await admin.post("/api/admin/auth/mfa", { code: totp(s1.data?.enrollment?.secret ?? process.env.ADMIN_TOTP_SECRET) });
+  check("admin signs in", s2.status === 200, s2.data);
+  const rej = await admin.post(`/api/admin/store/applications/${B.split("/").pop()}/action`, { action: "reject", message: "Photo unclear" });
+  check("admin rejects the Full application", rej.status === 200, rej.data);
+  check("rejected owner stays locked (can still pick another package)", (await full.c.get("/api/business/mode")).data?.locked === true && (await full.c.get("/api/products")).status === 403);
+  const ap = await admin.post(`/api/admin/store/applications/${appId}/action`, { action: "approve" });
+  check("admin approves the Store and Inventory application", ap.status === 200 && ap.data?.packageApplied === "STORE_INVENTORY", ap.data);
+  m = await st.c.get("/api/business/mode");
+  check("approval unlocks the owner on the requested package", m.data.locked === false && m.data.mode === "STORE_INVENTORY" && !m.data.pendingMode, m.data);
+  check("inventory works after approval", (await st.c.get("/api/products")).status === 200);
+  check("store seller area works after approval", (await st.c.get("/api/seller/listings")).status === 200);
+  check("POS still excluded on Store and Inventory", (await st.c.get("/api/sales")).status === 403);
+}
 
 // Landing/choose-package page and geo data are reachable
 const pub = await bypass();

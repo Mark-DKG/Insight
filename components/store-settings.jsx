@@ -504,7 +504,6 @@ export function StoreSettings({ theme, dark, card: Card, inputStyle, label, appM
           {form.physicalPresence && (
             <div style={{ marginTop: 10 }}>
               {field("shopAddress", "Physical shop address", { max: 300 })}
-              <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: -6 }}>A photo of your Ghana Card or Voter's ID is also required below.</div>
             </div>
           )}
 

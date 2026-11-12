@@ -7,8 +7,8 @@ import { APPROVAL_WINDOW } from "../lib/store/application-rules";
 
 // Shown once, right after a new owner signs up. Until a package is chosen the
 // business runs on the most restricted one (inventory only), enforced on the
-// server. Packages that include Insight Store need the seller application to
-// be approved before store access is switched on.
+// server. Packages that include Insight Store lock the whole dashboard until the
+// seller application is approved; only the application screen is reachable.
 
 const GREEN = "#2E7D32";
 const DARK = "#145A32";
@@ -35,7 +35,8 @@ export default function ChoosePackage() {
     fetch("/api/business/mode")
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
-        if (b?.packageSelected) router.replace("/dashboard");
+        if (b?.locked) setReady(true); // waiting for approval: may still switch to a package that needs none
+        else if (b?.packageSelected) router.replace("/dashboard");
         else setReady(true);
       })
       .catch(() => setReady(true));
@@ -52,7 +53,7 @@ export default function ChoosePackage() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) { setError(body?.error ?? "Couldn't save your choice. Try again."); setBusy(false); return; }
       // Store packages go straight to the seller application; the rest go to the app.
-      router.push(body.pending ? "/settings?section=store" : picked === "INVENTORY_ONLY" ? "/inventory" : "/dashboard");
+      router.push(body.pending ? "/apply" : picked === "INVENTORY_ONLY" ? "/inventory" : "/dashboard");
       router.refresh();
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
@@ -100,7 +101,7 @@ export default function ChoosePackage() {
             {choice?.store && (
               <div role="note" style={{ marginTop: 18, background: "#fff", border: "1px solid #F0D9A8", borderLeft: "4px solid #B7791F", borderRadius: 8, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.6 }}>
                 <b>Insight Store access isn't automatic.</b> You'll fill in a short seller application and upload your documents, then wait for the Insight Store team to approve it. Approval takes {APPROVAL_WINDOW}.
-                {" "}Until then you can use {choice.key === "FULL" ? "inventory, POS and sales" : "inventory"}; Insight Store selling switches on once you're approved.
+                {" "}Until then your dashboard stays locked: you'll only see the application. Everything in the {choice.title} package switches on once you're approved. Need to start working today? Choose a package without Insight Store instead.
               </div>
             )}
 

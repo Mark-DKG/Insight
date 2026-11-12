@@ -143,6 +143,9 @@ model Business {
   // When the owner first chose a package after signup. NULL = still has to
   // choose; until then the business runs on the most restricted package.
   packageSelectedAt DateTime?
+  // True while an owner who asked for a store package waits for approval: they can
+  // only reach the application and package screens until then.
+  awaitingApproval Boolean @default(false)
   status          BusinessStatus @default(ACTIVE)
   suspendedAt     DateTime?
   suspendedReason String?

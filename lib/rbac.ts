@@ -79,7 +79,12 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
   ],
 };
 
+// A business waiting for Insight Store approval can only reach the seller
+// application and the package choice. Everything else is refused server-side.
+const LOCKED_ALLOWED: Permission[] = ["store:read", "store:apply", "settings.manage_application_mode"];
+
 export function can(claims: SessionClaims, permission: Permission): boolean {
+  if (claims.locked && !LOCKED_ALLOWED.includes(permission)) return false;
   return ROLE_PERMISSIONS[claims.role]?.includes(permission) ?? false;
 }
 

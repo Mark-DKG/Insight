@@ -65,11 +65,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
         seller = await createSellerFromApplication(tx, app);
         const wanted = app.business.pendingAppMode ?? app.requestedAppMode;
         if (wanted && wanted !== app.business.appMode) {
-          await tx.business.update({ where: { id: app.businessId }, data: { appMode: wanted, pendingAppMode: null } });
+          await tx.business.update({ where: { id: app.businessId }, data: { appMode: wanted, pendingAppMode: null, awaitingApproval: false } });
           await tx.auditLog.create({ data: { businessId: app.businessId, action: "APP_MODE_CHANGED", entityType: "Business", entityId: app.businessId, previousValue: { appMode: app.business.appMode }, newValue: { appMode: wanted, reason: `Insight Store application ${app.reference} approved` } } });
           packageApplied = wanted;
-        } else if (app.business.pendingAppMode) {
-          await tx.business.update({ where: { id: app.businessId }, data: { pendingAppMode: null } });
+        } else {
+          await tx.business.update({ where: { id: app.businessId }, data: { pendingAppMode: null, awaitingApproval: false } });
         }
       }
       if (action === "reject" && app.business.pendingAppMode) {

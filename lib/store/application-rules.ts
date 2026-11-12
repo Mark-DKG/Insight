@@ -3,7 +3,7 @@
 
 /** What applicants are told about review time. */
 export const APPROVAL_WINDOW = "2 to 18 days";
-export const APPROVAL_NOTE = `Approval usually takes ${APPROVAL_WINDOW}. You can keep using the parts of Insight your package already includes while you wait.`;
+export const APPROVAL_NOTE = `Approval usually takes ${APPROVAL_WINDOW}. Your dashboard stays locked until the Insight Store team approves your application.`;
 
 /** Fields every application must complete. Registration number is the only optional box. */
 export const REQUIRED_FIELDS = [
@@ -49,11 +49,9 @@ const blank = (v: unknown) => (Array.isArray(v) ? v.length === 0 : v === undefin
 
 export type Documents = { key: string; label: string; required: boolean }[];
 
-/** Documents that depend on the answers: a physical shop must identify its owner. */
-export function conditionalDocuments(data: Record<string, unknown>): Documents {
-  return data?.physicalPresence === true
-    ? [{ key: "owner_id", label: "Photo of your Ghana Card or Voter's ID", required: true }]
-    : [];
+/** Every application must include a photo of the owner's Ghana Card or Voter's ID. */
+export function conditionalDocuments(_data?: Record<string, unknown>): Documents {
+  return [{ key: "owner_id", label: "Photo of your Ghana Card or Voter's ID", required: true }];
 }
 
 export const CONDITIONAL_DOC_KEYS = ["owner_id"];
@@ -77,6 +75,6 @@ export function applicationProblems(data: Record<string, unknown>, { forSubmit =
 }
 
 export function missingDocuments(data: Record<string, unknown>, config: Documents, uploaded: string[]): string[] {
-  const all = [...config.filter((d) => d.required), ...conditionalDocuments(data)];
+  const all = [...config.filter((d) => d.required && d.key !== "owner_id"), ...conditionalDocuments(data)];
   return all.filter((d) => !uploaded.includes(d.key)).map((d) => d.label);
 }

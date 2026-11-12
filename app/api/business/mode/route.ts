@@ -8,10 +8,6 @@ import { OPEN_APPLICATION_STATUSES } from "@/lib/store/core";
 import { uniqueReference, actorLabel } from "@/lib/store/server";
 import { APPROVAL_NOTE } from "@/lib/store/application-rules";
 
-// While a store package waits for approval, the business runs on the same
-// package minus Insight Store, so POS and inventory work from day one.
-const interimMode = (m: AppMode): AppMode => (m === "FULL" ? "POS_INVENTORY" : m === "STORE_INVENTORY" ? "INVENTORY_ONLY" : m);
-
 // GET /api/business/mode — the active package for the caller's business. Any
 // signed-in user may read it (the UI needs it to build navigation).
 export async function GET() {
@@ -21,7 +17,7 @@ export async function GET() {
   }
   const business = await prisma.business.findUnique({
     where: { id: session.businessId },
-    select: { appMode: true, pendingAppMode: true, packageSelectedAt: true, storeSeller: { select: { status: true } } },
+    select: { appMode: true, pendingAppMode: true, packageSelectedAt: true, awaitingApproval: true, storeSeller: { select: { status: true } } },
   });
   const mode = (business?.appMode ?? "FULL") as AppMode;
   return NextResponse.json({
@@ -29,6 +25,7 @@ export async function GET() {
     label: PACKAGE_LABEL[mode],
     pendingMode: business?.pendingAppMode ?? null,
     packageSelected: !!business?.packageSelectedAt,
+    locked: !!business?.awaitingApproval,
     disabledModules: disabledModules(mode),
     sellerStatus: business?.storeSeller?.status ?? null,
     canChange: requirePermission(session, "settings.manage_application_mode"),
@@ -61,7 +58,7 @@ export async function PUT(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const current = await tx.business.findUnique({
         where: { id: session.businessId },
-        select: { appMode: true, pendingAppMode: true, packageSelectedAt: true, storeSeller: { select: { status: true } } },
+        select: { appMode: true, pendingAppMode: true, packageSelectedAt: true, awaitingApproval: true, storeSeller: { select: { status: true } } },
       });
       if (!current) throw new Error("Business not found.");
       const approved = !!current.storeSeller;
@@ -89,8 +86,11 @@ export async function PUT(request: Request) {
         } else {
           await tx.storeSellerApplication.update({ where: { id: app.id }, data: { requestedAppMode: next } });
         }
-        const holding = firstChoice ? interimMode(next) : current.appMode;
-        await tx.business.update({ where: { id: session.businessId }, data: { pendingAppMode: next, appMode: holding, packageSelectedAt: selectedAt } });
+        // A business choosing a store package for the first time gets no access to
+        // anything but the application until it is approved. An existing business
+        // keeps the package it already has while its upgrade is reviewed.
+        const holding = current.appMode;
+        await tx.business.update({ where: { id: session.businessId }, data: { pendingAppMode: next, packageSelectedAt: selectedAt, ...(firstChoice || current.awaitingApproval ? { awaitingApproval: true } : {}) } });
         await tx.auditLog.create({
           data: {
             businessId: session.businessId, userId: session.sub, branchId: session.branchId, action: "APP_MODE_CHANGE_REQUESTED",
@@ -102,10 +102,10 @@ export async function PUT(request: Request) {
       }
 
       if (current.appMode === next && !current.pendingAppMode) {
-        if (firstChoice) await tx.business.update({ where: { id: session.businessId }, data: { packageSelectedAt: selectedAt } });
+        if (firstChoice || current.awaitingApproval) await tx.business.update({ where: { id: session.businessId }, data: { packageSelectedAt: selectedAt, awaitingApproval: false } });
         return { previous: current.appMode, mode: next, changed: false, pending: null, applicationId: null };
       }
-      await tx.business.update({ where: { id: session.businessId }, data: { appMode: next, pendingAppMode: null, packageSelectedAt: selectedAt } });
+      await tx.business.update({ where: { id: session.businessId }, data: { appMode: next, pendingAppMode: null, packageSelectedAt: selectedAt, awaitingApproval: false } });
       await tx.auditLog.create({
         data: {
           businessId: session.businessId, userId: session.sub, branchId: session.branchId, action: "APP_MODE_CHANGED",

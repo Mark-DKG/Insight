@@ -10,6 +10,8 @@ export interface SessionClaims {
   branchId: string | null;
   role: "OWNER" | "MANAGER" | "CASHIER";
   email: string;
+  /** Set at request time (never in the token): the business is waiting for store approval. */
+  locked?: boolean;
 }
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
