@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
+import { sendAuthEmail } from "@/lib/email/service";
+import { sendVerificationEmail } from "@/lib/email/flows";
 
 // Registration creates a brand-new tenant: one Business, one main Branch,
 // and one OWNER user. Every subsequent user in this business is invited by
@@ -73,6 +75,12 @@ export async function POST(request: Request) {
 
     return { business, owner };
   });
+
+  // Email never blocks or fails registration: the account exists either way.
+  await Promise.allSettled([
+    sendAuthEmail("welcome", email, { name: ownerName, businessName }, `welcome:${result.owner.id}`, undefined, result.business.id),
+    sendVerificationEmail(result.owner.id),
+  ]);
 
   return NextResponse.json(
     {

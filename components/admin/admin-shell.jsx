@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, createContext, useContext } from "
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, Building2, Users, GitBranch, ShieldCheck, LineChart, Activity, RefreshCw, ScrollText,
-  LifeBuoy, HardDrive, Bell, Flag, Settings, Lock, LogOut, Sun, Moon, Menu, X, ShoppingBag,
+  LifeBuoy, HardDrive, Bell, Flag, Settings, Lock, LogOut, Sun, Moon, Menu, X, ShoppingBag, Mail,
 } from "lucide-react";
 import NotificationBell from "../notification-bell";
 import { ADMIN_THEMES, Button, Card, Notice, inputStyle } from "./ui";
@@ -21,6 +21,7 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, live: true, perm: "businesses.read" },
   { href: "/admin/businesses", label: "Businesses", icon: Building2, live: true, perm: "businesses.read" },
   { href: "/admin/store", label: "Insight Store", icon: ShoppingBag, live: true, perm: "marketplace.read" },
+  { href: "/admin/email", label: "Email", icon: Mail, live: true, perm: "system.monitor" },
   { label: "Users", icon: Users, milestone: 2 },
   { label: "Branches", icon: GitBranch, milestone: 2 },
   { label: "Administrators", icon: ShieldCheck, milestone: 2 },

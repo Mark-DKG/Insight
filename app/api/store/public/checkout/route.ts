@@ -7,6 +7,7 @@ import { findCart, cartView, hashToken, REF_COOKIE } from "@/lib/store/cart";
 import { uniqueReference, getStoreConfig, fulfilmentBranchId } from "@/lib/store/server";
 import { splitBySeller, normalizeWhatsApp, buildWhatsAppMessage, whatsAppLink, cleanChannel } from "@/lib/store/core";
 import { notifyBusiness } from "@/lib/notify";
+import { emailMarketplaceOrderRequest } from "@/lib/email/events";
 import { currentShopper } from "@/lib/store/shopper";
 
 const Schema = z.object({
@@ -132,6 +133,12 @@ export async function POST(request: Request) {
     console.error("Checkout failed:", e);
     return NextResponse.json({ error: "Your order could not be placed. Nothing was charged and your cart is unchanged." }, { status: 500 });
   }
+
+  // Tell each seller by email (after the order is saved; never blocks the shopper).
+  try {
+    const placed = await prisma.storeOrder.findMany({ where: { checkoutId }, select: { id: true, reference: true, businessId: true, currency: true, subtotal: true, items: { select: { quantity: true } } } });
+    await Promise.allSettled(placed.map((o) => emailMarketplaceOrderRequest(o.businessId, { id: o.id, reference: o.reference, items: o.items.reduce((n, i) => n + i.quantity, 0), total: o.subtotal.toString(), currency: o.currency })));
+  } catch { /* the order stands either way */ }
 
   return NextResponse.json(await checkoutResult(checkoutId, token), { status: 201 });
 }

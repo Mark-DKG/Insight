@@ -4,6 +4,8 @@ import { getSession } from "@/lib/tenant";
 import { requireSeller, actorLabel } from "@/lib/store/server";
 import { applyOrderAction, OrderActionError } from "@/lib/store/orders";
 import { checkStockAlerts } from "@/lib/notify";
+import { emailSellerOrderStatus } from "@/lib/email/events";
+import { prisma } from "@/lib/prisma";
 
 const Schema = z.object({
   action: z.enum(["confirm", "reject", "awaiting_payment", "record_payment", "processing", "ready", "dispatch", "complete", "cancel", "record_refund"]),
@@ -27,6 +29,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     if ("stockChanged" in result && result.stockChanged && result.productIds) {
       await checkStockAlerts(g.session.businessId, result.productIds).catch((e) => console.error("Stock alert check failed:", e));
     }
+    try {
+      const st = (result as { status?: string; paymentStatus?: string }).status;
+      if (st) {
+        const order = await prisma.storeOrder.findFirst({ where: { id: params.id, businessId: g.session.businessId }, select: { id: true, reference: true } });
+        if (order) await emailSellerOrderStatus(g.session.businessId, order, st.toLowerCase().replace(/_/g, " "), `${parsed.data.action}:${st}`);
+      }
+    } catch { /* the status change stands either way */ }
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof OrderActionError) return NextResponse.json({ error: e.message }, { status: e.status });

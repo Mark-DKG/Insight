@@ -9,6 +9,7 @@ import {
   REFRESH_COOKIE,
   cookieOptions,
 } from "@/lib/auth";
+import { sendAuthEmail } from "@/lib/email/service";
 
 const LoginSchema = z.object({
   email: z.string().email(),
@@ -65,6 +66,10 @@ export async function POST(request: Request) {
         data: { businessId: user.businessId, userId: user.id, action: "LOGIN_FAILED", entityType: "User", entityId: user.id },
       })
       .catch(() => null);
+    // Tell the account owner when this failure trips the lockout (once per window).
+    if (recentFailures + 1 === MAX_FAILED_ATTEMPTS) {
+      await sendAuthEmail("security_login_attempts", user.email, { minutes: LOCKOUT_WINDOW_MS / 60000 }, `lockout:${user.id}:${Math.floor(Date.now() / LOCKOUT_WINDOW_MS)}`, undefined, user.businessId).catch(() => null);
+    }
     return NextResponse.json({ error: INVALID_CREDENTIALS_MESSAGE }, { status: 401 });
   }
 

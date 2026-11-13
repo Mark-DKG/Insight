@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, NotificationType } from "@prisma/client";
 import { prisma } from "./prisma";
+import { emailStockAlert } from "./email/events";
 
 // ----------------------------------------------------------------------------
 // Notifications
@@ -90,12 +91,14 @@ export async function checkStockAlerts(businessId: string, productIds: string[],
         message: `${t.name} has no stock left across your branches.`, link: "/inventory",
         dedupeKey: `stock:out:${productId}`,
       }, db);
+      await emailStockAlert(businessId, productId, "out", { name: t.name, qty: 0, min: t.min });
     } else if (t.qty <= t.min) {
       await notifyBusiness({
         businessId, type: "LOW_STOCK", title: `${t.name} is running low`,
         message: `${t.qty} left (minimum ${t.min}).`, link: "/inventory",
         dedupeKey: `stock:low:${productId}`,
       }, db);
+      await emailStockAlert(businessId, productId, "low", { name: t.name, qty: t.qty, min: t.min });
     } else {
       // Recovered: clear the dedupe keys so the next drop alerts again.
       await db.notification.updateMany({

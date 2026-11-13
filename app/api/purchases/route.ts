@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { emailPurchaseOrder } from "@/lib/email/events";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -96,6 +97,8 @@ export async function POST(request: Request) {
 
     return created;
   });
+
+  await emailPurchaseOrder(session.businessId, purchase.id, { supplier: supplier.name, total: totalCost.toString() });
 
   return NextResponse.json({ purchase }, { status: 201 });
 }

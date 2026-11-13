@@ -6,6 +6,7 @@ import { actorLabel, getStoreConfig } from "@/lib/store/server";
 import { applicationTransition, type ApplicationStatus } from "@/lib/store/core";
 import { applicationProblems, missingDocuments, type Documents } from "@/lib/store/application-rules";
 import { notifyBusiness, notifyPlatform } from "@/lib/notify";
+import { emailAdminNewApplication, emailApplicationToOwners } from "@/lib/email/events";
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -64,5 +65,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }).catch((e) => (e instanceof Error && e.message === "CONFLICT" ? null : Promise.reject(e)));
 
   if (!updated) return NextResponse.json({ error: "The application changed while you were submitting. Refresh and try again." }, { status: 409 });
+  // Emails go out after the submission is saved and never block it.
+  try {
+    const name = (updated.data as { registeredName?: string } | null)?.registeredName ?? "A business";
+    await Promise.allSettled([
+      emailApplicationToOwners(session.businessId, "seller_application_submitted", { businessName: name }, `appsubmitted:${updated.id}:${updated.submittedAt?.getTime() ?? 0}`),
+      emailAdminNewApplication(updated.id, name, wasInfoRequest),
+    ]);
+  } catch { /* best effort */ }
   return NextResponse.json({ application: updated });
 }

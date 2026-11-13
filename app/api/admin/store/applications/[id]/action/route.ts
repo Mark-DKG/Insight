@@ -5,6 +5,7 @@ import { platformAudit, requireAdmin } from "@/lib/admin/session";
 import { applicationTransition, type ApplicationStatus } from "@/lib/store/core";
 import { createSellerFromApplication } from "@/lib/store/approve";
 import { notifyBusiness } from "@/lib/notify";
+import { emailApplicationToOwners } from "@/lib/email/events";
 
 const Schema = z.object({
   action: z.enum(["start_review", "request_info", "approve", "reject", "note"]),
@@ -89,6 +90,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
       }, tx);
       return { status: to, sellerId: seller?.id ?? null, packageApplied };
     }, { timeout: 20000, maxWait: 10000 });
+    try {
+      const statusFor = { start_review: "UNDER_REVIEW", request_info: "INFO_REQUIRED", approve: "APPROVED", reject: "REJECTED" } as Record<string, string>;
+      const st = statusFor[action];
+      if (st) await emailApplicationToOwners(app.businessId, "seller_application_status", { status: st, note: action === "request_info" || action === "reject" ? message.slice(0, 500) : undefined }, `appstatus:${app.id}:${st}:${Date.now()}`);
+    } catch { /* the decision stands either way */ }
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof Error && e.message === "CONFLICT") return NextResponse.json({ error: "The application changed while you were reviewing it. Refresh and try again." }, { status: 409 });

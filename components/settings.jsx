@@ -6,7 +6,7 @@ import { PackageSettings, StoreSettings } from "./store-settings";
 import NotificationBell from "./notification-bell";
 import { LogOut as LogOutIcon, History as HistoryIcon } from "lucide-react";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -248,6 +248,20 @@ export default function InsightSettings() {
   const [roundTotals, setRoundTotals] = useState(true);
   const [requireCustomerForCredit, setRequireCustomerForCredit] = useState(true);
 
+  const [emailPrefs, setEmailPrefs] = useState(null);
+  const [emailPrefMsg, setEmailPrefMsg] = useState(null);
+  useEffect(() => {
+    if (section !== "notifications" || emailPrefs) return;
+    fetch("/api/business/email-preferences").then((r) => (r.ok ? r.json() : null)).then((b) => b && setEmailPrefs(b.preferences)).catch(() => {});
+  }, [section, emailPrefs]);
+  async function changeEmailPref(key, value) {
+    const previous = emailPrefs;
+    setEmailPrefs({ ...emailPrefs, [key]: value });
+    setEmailPrefMsg(null);
+    const res = await fetch("/api/business/email-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [key]: value }) }).catch(() => null);
+    if (res && res.ok) setEmailPrefMsg({ ok: true, text: "Saved." });
+    else { setEmailPrefs(previous); const b = res ? await res.json().catch(() => ({})) : {}; setEmailPrefMsg({ ok: false, text: b.error || "Could not save. Nothing changed." }); }
+  }
   const [notifyLowStock, setNotifyLowStock] = useState(true);
   const [notifyCreditDue, setNotifyCreditDue] = useState(true);
   const [notifySyncErrors, setNotifySyncErrors] = useState(true);
@@ -556,6 +570,25 @@ export default function InsightSettings() {
                   <Toggle checked={notifySyncErrors} onChange={setNotifySyncErrors} color={primary} border={theme.border} />
                 </Row>
                 <SaveBar />
+              </Card>
+            )}
+
+            {section === "notifications" && (
+              <Card style={{ maxWidth: 640, marginTop: 14 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Email Notifications</div>
+                <div style={{ fontSize: 12.5, color: theme.textMuted, marginBottom: 12 }}>Sent to your business owners and managers. Account and security emails (email confirmation, password reset, password changed, security alerts, seller application status) are always sent and cannot be turned off.</div>
+                {!emailPrefs ? (
+                  <div style={{ fontSize: 12.5, color: theme.textMuted }}>Loading...</div>
+                ) : (
+                  <>
+                    <Row title="Low stock emails" description="Email when a product falls to or below its minimum level (at most once a day per product)."><Toggle checked={emailPrefs.lowStock} onChange={(v) => changeEmailPref("lowStock", v)} color={primary} border={theme.border} /></Row>
+                    <Row title="Purchase order emails" description="Email when a purchase order is recorded."><Toggle checked={emailPrefs.purchaseOrders} onChange={(v) => changeEmailPref("purchaseOrders", v)} color={primary} border={theme.border} /></Row>
+                    <Row title="Marketplace emails" description="Email about Insight Store orders and order status."><Toggle checked={emailPrefs.marketplace} onChange={(v) => changeEmailPref("marketplace", v)} color={primary} border={theme.border} /></Row>
+                    <Row title="Daily sales summary" description="A short summary of yesterday's sales."><Toggle checked={emailPrefs.salesSummary} onChange={(v) => changeEmailPref("salesSummary", v)} color={primary} border={theme.border} /></Row>
+                    {emailPrefMsg && <div role="status" style={{ fontSize: 12.5, marginTop: 10, color: emailPrefMsg.ok ? primary : bad }}>{emailPrefMsg.text}</div>}
+                    <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 10 }}>Only owners can change these. Changes are recorded in the audit log.</div>
+                  </>
+                )}
               </Card>
             )}
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendAdminNotification } from "@/lib/email/service";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { platformAudit, requireAdmin } from "@/lib/admin/session";
@@ -158,6 +159,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return after;
     });
 
+    if (input.action === "suspend" || input.action === "reactivate") {
+      // Compliance-relevant platform action: tell the central address (business details stay in the audit log).
+      await sendAdminNotification("admin_compliance_event", { event: input.action === "suspend" ? "A business account was suspended" : "A business account was reactivated", detail: "See the platform audit log for who did it and why." }, `compliance:${before.id}:${input.action}:${Date.now()}`).catch(() => null);
+    }
     return NextResponse.json({ business: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
