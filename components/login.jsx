@@ -1,5 +1,6 @@
 "use client";
 
+import { ForgotPassword } from "./auth-email";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
@@ -9,6 +10,7 @@ const LOGO_FULL = "/brand/insight-logo.png";
 export default function InsightLogin({ initialMode = "login" }) {
   const router = useRouter();
   const [mode, setMode] = useState(initialMode); // login | register
+  const [forgot, setForgot] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -96,6 +98,8 @@ export default function InsightLogin({ initialMode = "login" }) {
       setLoading(false);
     }
   }
+
+  if (forgot) return <ForgotPassword onBack={() => setForgot(false)} defaultEmail={email} />;
 
   return (
     <div
@@ -218,7 +222,7 @@ export default function InsightLogin({ initialMode = "login" }) {
 
           {mode === "login" && (
             <div style={{ textAlign: "right", marginBottom: 20 }}>
-              <button type="button" style={{ background: "transparent", border: "none", color: primary, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+              <button type="button" onClick={() => setForgot(true)} style={{ background: "transparent", border: "none", color: primary, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                 Forgot password?
               </button>
             </div>

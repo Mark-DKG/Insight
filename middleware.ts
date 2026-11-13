@@ -18,6 +18,18 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",
+  // Email flows: links in emails are opened by signed-out visitors.
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/auth/verify-email",
+  "/reset-password",
+  "/verify-email",
+  "/contact",
+  "/api/contact",
+  // Resend webhooks authenticate by signature, not by cookie.
+  "/api/email/webhook",
+  // Vercel cron authenticates with CRON_SECRET inside the route.
+  "/api/cron/email",
   // Crash reports must get through even when the session has expired.
   "/api/client-errors",
   // Insight Store marketplace: guests browse, build a cart and place order

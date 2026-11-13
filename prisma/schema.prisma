@@ -189,6 +189,7 @@ model User {
   passwordHash String
   role         UserRole @default(CASHIER)
   isActive     Boolean  @default(true)
+  emailVerifiedAt DateTime?
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -201,6 +202,7 @@ model User {
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
   notifications Notification[]
   storeApplications StoreSellerApplication[]
 
@@ -1166,4 +1168,66 @@ model StoreShopperSession {
 
   @@index([shopperId])
   @@index([expiresAt])
+}
+
+// ----------------------------------------------------------------------------
+// Transactional email (Resend). See docs/EMAIL.md.
+// ----------------------------------------------------------------------------
+
+// Single-use, time-limited email verification tokens; only the hash is stored.
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// One row per email: it is both the outbox (queued/retrying) and the delivery
+// record. Message bodies and tokens are never stored. `payload` holds only
+// non-secret template data and is cleared once the email is finished.
+model EmailMessage {
+  id             String    @id @default(uuid())
+  idempotencyKey String    @unique
+  category       String
+  template       String
+  toAddress      String
+  businessId     String?
+  // QUEUED, SENDING, SENT, DELIVERED, DELAYED, BOUNCED, COMPLAINED, FAILED, SUPPRESSED, SKIPPED
+  status         String    @default("QUEUED")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  providerId     String?   @unique
+  lastError      String?
+  payload        Json?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([category, createdAt])
+  @@index([createdAt])
+}
+
+// Webhook events already processed (Resend/Svix delivery id) so a replayed
+// event is ignored.
+model EmailWebhookEvent {
+  id        String   @id
+  type      String
+  createdAt DateTime @default(now())
+}
+
+// Platform-wide email switch and central address, editable by Super Admins.
+model EmailSetting {
+  id             String   @id @default("default")
+  enabled        Boolean  @default(true)
+  centralAddress String?
+  updatedBy      String?
+  updatedAt      DateTime @default(now()) @updatedAt
 }

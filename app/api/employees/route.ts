@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendAuthEmail } from "@/lib/email/service";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession, tenantScope } from "@/lib/tenant";
@@ -100,6 +101,15 @@ export async function POST(request: Request) {
 
     return created;
   });
+
+  // Invitation email (no password inside). Never blocks the invite.
+  try {
+    const [biz, inviter] = await Promise.all([
+      prisma.business.findUnique({ where: { id: session.businessId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: session.sub }, select: { name: true } }),
+    ]);
+    await sendAuthEmail("employee_invite", employee.email, { businessName: biz?.name ?? "your business", inviterName: inviter?.name ?? "A manager", roleLabel: employee.role === "MANAGER" ? "Manager" : "Cashier" }, `invite:${employee.id}`, undefined, session.businessId);
+  } catch { /* the employee exists either way */ }
 
   return NextResponse.json(
     { employee: { id: employee.id, name: employee.name, email: employee.email, role: employee.role } },

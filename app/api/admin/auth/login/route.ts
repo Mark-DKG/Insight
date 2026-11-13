@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendAdminNotification } from "@/lib/email/service";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth";
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
   const ok = admin && admin.isActive && (await verifyPassword(parsed.data.password, admin.passwordHash));
   if (!admin || !ok) {
     await platformAudit(null, { action: "ADMIN_LOGIN_FAILED", actorEmail: email, reason: "password" });
+    if (failures + 1 === MAX_FAILURES) {
+      // Security event to the central address (no address of the target is exposed beyond the audit log).
+      await sendAdminNotification("admin_security_event", { event: "Administrator sign-in locked after repeated failed attempts", detail: "Check the platform audit log for details." }, `adminlock:${email}:${Math.floor(Date.now() / WINDOW_MS)}`).catch(() => null);
+    }
     return NextResponse.json({ error: GENERIC }, { status: 401 });
   }
 
