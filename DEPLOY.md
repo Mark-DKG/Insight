@@ -14,6 +14,10 @@ A failed build never replaces the live site.
 
 | `NEXT_PUBLIC_STORE_ORIGIN` | Optional. Absolute origin used in Insight Store share links and Open Graph tags (e.g. `https://store.insight.9devs.app`). Defaults to the request host. |
 
+Email variables (`EMAIL_ENABLED`, `RESEND_API_KEY`, `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS`, `EMAIL_REPLY_TO`,
+`EMAIL_CONTACT_ADDRESS`, `EMAIL_ADMIN_ADDRESS`, `EMAIL_PROVIDER`, `EMAIL_WEBHOOK_SECRET`, `APP_PUBLIC_URL`, `CRON_SECRET`)
+are explained in [docs/EMAIL.md](docs/EMAIL.md). Email stays off until `EMAIL_ENABLED=true`.
+
 Never commit real values. `.env.example` lists the names only.
 
 ## Insight Store domain
@@ -39,8 +43,13 @@ Migrations live in `prisma/migrations/` and are committed:
 | `2_settings_receipts_resets` | `Business.receiptCounter`, `Business.settings`, `PasswordResetToken`. |
 | `3_app_mode` | `AppMode` enum and `Business.appMode` (default `FULL`). |
 | `4_platform_admin` | `PlatformAdmin`, `PlatformAdminSession`, append-only `PlatformAuditLog` (DB trigger), `Business.status`. |
+| `5_insight_store` | Insight Store marketplace tables. |
+| `6_shopper_accounts` | Shopper accounts on the store. |
+| `7_package_selection` | `Business.pendingAppMode`, `packageSelectedAt`. |
+| `8_awaiting_approval` | `Business.awaitingApproval` (dashboard locked until store approval). |
+| `9_transactional_email` | `User.emailVerifiedAt`, `EmailVerificationToken`, `EmailMessage` (outbox and delivery record), `EmailWebhookEvent`, `EmailSetting`. **Not applied to production yet.** |
 
-All five are recorded as applied on the production database. Migrations are additive and
+Migrations 0 to 8 are recorded as applied on the production database; 9 waits for approval. Migrations are additive and
 non-destructive.
 
 **Applying a new migration to production** (from a machine with `DATABASE_URL` pointing at production):
