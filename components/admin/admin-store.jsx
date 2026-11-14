@@ -10,7 +10,7 @@ import { Badge, Button, Card, ConfirmDialog, Notice, Stat, fmtDateTime, fmtMoney
 // writes the platform audit log.
 
 const TABS = [
-  ["overview", "Overview"], ["applications", "Applications"], ["sellers", "Sellers"], ["listings", "Listings"], ["orders", "Orders"], ["settings", "Settings"],
+  ["overview", "Overview"], ["applications", "Applications"], ["sellers", "Sellers"], ["listings", "Listings"], ["orders", "Orders"], ["reviews", "Reviews"], ["settings", "Settings"],
 ];
 const APP_TONE = { SUBMITTED: "warn", UNDER_REVIEW: "warn", INFO_REQUIRED: "neutral", APPROVED: "good", REJECTED: "bad", WITHDRAWN: "neutral", DRAFT: "neutral" };
 const APP_LABEL = { DRAFT: "Draft", SUBMITTED: "Submitted", UNDER_REVIEW: "Under review", INFO_REQUIRED: "Info required", APPROVED: "Approved", REJECTED: "Rejected", WITHDRAWN: "Withdrawn" };
@@ -77,6 +77,7 @@ function StoreBody({ initialTab }) {
       {tab === "sellers" && <Sellers />}
       {tab === "listings" && <Listings />}
       {tab === "orders" && <Orders />}
+      {tab === "reviews" && <ReviewsTab />}
       {tab === "settings" && <SettingsTab />}
     </>
   );
@@ -571,6 +572,60 @@ function SettingsTab() {
         <ConfirmDialog t={t} busy={busy} error={dialogError} requireReason confirmLabel="Save settings" title="Save marketplace settings?"
           body={form.isOpen ? "Changes apply to the public marketplace immediately." : "Closing the marketplace stops new orders immediately. Customers can still browse; existing orders are unaffected."}
           onCancel={() => setDialog(false)} onConfirm={save} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+function ReviewsTab() {
+  const { t, me } = useAdmin();
+  const [filter, setFilter] = useState("reported");
+  const { data, error, reload } = useList(`/api/admin/store/reviews?filter=${filter}`);
+  const [dialog, setDialog] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState("");
+  const canManage = me?.permissions?.includes("marketplace.manage");
+  async function act(r, action, reason) {
+    setBusy(true); setDialogError("");
+    const res = await api(`/api/admin/store/reviews/${r.id}/action`, { method: "POST", body: JSON.stringify({ action, reason }) });
+    setBusy(false);
+    if (!res.ok) { setDialogError(res.body.error ?? "Failed."); return; }
+    setDialog(null); reload();
+  }
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle(t), width: "auto" }}>
+        <option value="reported">Reported</option><option value="hidden">Hidden</option><option value="all">All reviews</option>
+      </select>
+      {error ? <Notice t={t}>{error}</Notice> : !data ? <div style={{ color: t.muted, fontSize: 13 }}>Loading…</div> : data.reviews.length === 0 ? <Card t={t}><div style={{ color: t.muted, fontSize: 13 }}>Nothing here.</div></Card> : data.reviews.map((r) => (
+        <Card t={t} key={r.id}>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <b>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</b> <span>{r.displayName}</span>
+                <Badge t={t} tone={r.status === "HIDDEN" ? "bad" : "neutral"}>{r.status === "HIDDEN" ? "Hidden" : "Visible"}</Badge>
+                {r.openReports.length > 0 && <Badge t={t} tone="warn">{r.openReports.length} open report{r.openReports.length === 1 ? "" : "s"}</Badge>}
+              </div>
+              <div style={{ fontSize: 12.5, color: t.muted, marginTop: 3 }}>{r.seller} · {r.product ? r.product.title : "Store review"} · {fmtDateTime(r.createdAt)}</div>
+              {r.comment && <div style={{ fontSize: 13.5, marginTop: 6, whiteSpace: "pre-wrap" }}>{r.comment}</div>}
+              {r.openReports.map((p) => <div key={p.id} style={{ fontSize: 12.5, marginTop: 4, color: t.danger }}>Report from {p.reporterType === "SELLER" ? "the seller" : "a shopper"}: {p.reason}</div>)}
+              {r.hiddenReason && <div style={{ fontSize: 12, color: t.muted, marginTop: 4 }}>Hidden because: {r.hiddenReason}</div>}
+            </div>
+            {canManage && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
+                {r.status === "VISIBLE" && <Button t={t} kind="danger" onClick={() => { setDialogError(""); setDialog({ r, action: "hide" }); }}>Hide</Button>}
+                {r.status === "HIDDEN" && <Button t={t} disabled={busy} onClick={() => act(r, "unhide")}>Restore</Button>}
+                {r.openReports.length > 0 && r.status === "VISIBLE" && <Button t={t} disabled={busy} onClick={() => act(r, "dismiss_reports")}>Dismiss reports</Button>}
+              </div>
+            )}
+          </div>
+        </Card>
+      ))}
+      {dialog && (
+        <ConfirmDialog t={t} busy={busy} error={dialogError} requireReason danger confirmLabel="Hide review" title="Hide this review?"
+          body="It stops showing on the store and stops counting toward ratings. The seller is told why. The shopper can't edit it afterwards."
+          onCancel={() => setDialog(null)} onConfirm={(reason) => act(dialog.r, dialog.action, reason)} />
       )}
     </div>
   );

@@ -34,6 +34,7 @@ const TABS = [
   { key: "overview", label: "Overview" },
   { key: "listings", label: "Listings" },
   { key: "orders", label: "Orders" },
+  { key: "reviews", label: "Reviews" },
   { key: "profile", label: "Store profile" },
 ];
 
@@ -204,6 +205,7 @@ export default function InsightSeller() {
               {tab === "overview" && <Overview {...ui} card={card} go={go} />}
               {tab === "listings" && <Listings {...ui} card={card} canManage={profile.canManage && profile.canSell} />}
               {tab === "orders" && <Orders {...ui} card={card} canManage={profile.canManage && profile.canSell} focus={focusOrder} clearFocus={() => setFocusOrder(null)} />}
+              {tab === "reviews" && <Reviews {...ui} card={card} canManage={profile.canManage && profile.canSell} />}
               {tab === "profile" && <Profile {...ui} card={card} profile={profile} onSaved={loadProfile} canManage={profile.canManage && profile.canSell} />}
             </>
           )}
@@ -777,5 +779,85 @@ function Profile({ theme, card, profile, onSaved, canManage }) {
       <Msg msg={msg} />
       {canManage && <div style={{ marginTop: 14 }}><Btn theme={theme} type="submit" disabled={busy}>{busy ? "Saving…" : "Save profile"}</Btn></div>}
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reviews: customers' ratings of the store and its products. Sellers can reply
+// publicly and report abuse; only Insight Store moderators can remove one.
+function Reviews({ theme, card, canManage }) {
+  const [filter, setFilter] = useState("all");
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [replying, setReplying] = useState(null);
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    const r = await api(`/api/seller/reviews?filter=${filter}`);
+    if (!r.ok) { setErr(r.body.error); return; }
+    setErr(null);
+    setData(r.body);
+  }, [filter]);
+  useEffect(() => { load(); }, [load]);
+  async function send(id, reply) {
+    setBusy(true); setMsg(null);
+    const r = await api(`/api/seller/reviews/${id}/reply`, { method: "POST", body: JSON.stringify({ reply }) });
+    setBusy(false);
+    if (!r.ok) { setMsg({ ok: false, text: r.body.error ?? "Couldn't save the reply." }); return; }
+    setReplying(null); setText(""); load();
+  }
+  const [reportFor, setReportFor] = useState(null);
+  const [reportText, setReportText] = useState("");
+  async function report(id) {
+    const r = await api(`/api/seller/reviews/${id}/report`, { method: "POST", body: JSON.stringify({ reason: reportText }) });
+    setMsg({ ok: r.ok, text: r.ok ? "Reported. Insight Store moderators will review it." : r.body.error ?? "Couldn't send the report." });
+    if (r.ok) { setReportFor(null); setReportText(""); load(); }
+  }
+  const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+  const store = data?.summary?.find((x) => x.kind === "STORE");
+  const prod = data?.summary?.find((x) => x.kind === "PRODUCT");
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700 }}>Reviews</div>
+        {store && <span style={{ fontSize: 12.5, color: theme.textMuted }}>Store: <b style={{ color: theme.text }}>{store.average.toFixed(1)}</b> ({store.count})</span>}
+        {prod && <span style={{ fontSize: 12.5, color: theme.textMuted }}>Products: <b style={{ color: theme.text }}>{prod.average.toFixed(1)}</b> ({prod.count})</span>}
+        <select aria-label="Filter reviews" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginLeft: "auto", border: `1px solid ${theme.border}`, borderRadius: 6, padding: "6px 8px", fontSize: 12.5, background: theme.input, color: theme.text }}>
+          <option value="all">All</option><option value="unanswered">Needs a reply</option><option value="reported">Reported</option>
+        </select>
+      </div>
+      <Msg msg={msg} />
+      {err ? <Msg msg={{ ok: false, text: err }} /> : !data ? <div style={{ fontSize: 13, color: theme.textMuted }}>Loading reviews…</div> : data.reviews.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "28px 10px", fontSize: 13, color: theme.textMuted }}>No reviews yet. Customers can review you after a completed order.</div>
+      ) : data.reviews.map((r) => (
+        <div key={r.id} style={{ borderTop: `1px solid ${theme.border}`, padding: "12px 0", display: "grid", gap: 4 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+            <span style={{ color: "#B7791F", letterSpacing: 1 }} aria-label={`${r.rating} out of 5`}>{stars(r.rating)}</span>
+            <b>{r.displayName}</b>
+            <span style={{ color: theme.textMuted, fontSize: 12 }}>{new Date(r.createdAt).toLocaleDateString()} · {r.product ? r.product.title : "Store review"}</span>
+          </div>
+          {r.comment && <div style={{ fontSize: 13.5, whiteSpace: "pre-wrap" }}>{r.comment}</div>}
+          {r.sellerReply && <div style={{ fontSize: 13, background: theme.input, borderLeft: "3px solid #2E7D32", padding: "6px 10px", borderRadius: 4, whiteSpace: "pre-wrap" }}><b>Your reply:</b> {r.sellerReply}</div>}
+          {canManage && reportFor === r.id ? (
+            <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+              <input aria-label="Reason for reporting" value={reportText} maxLength={500} onChange={(e) => setReportText(e.target.value)} placeholder="Why should moderators look at this review?" style={{ border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, fontSize: 13, background: theme.input, color: theme.text }} />
+              <div style={{ display: "flex", gap: 8 }}><Btn theme={theme} kind="danger" disabled={reportText.trim().length < 5} onClick={() => report(r.id)}>Send report</Btn><Btn theme={theme} kind="ghost" onClick={() => setReportFor(null)}>Cancel</Btn></div>
+            </div>
+          ) : canManage && (replying === r.id ? (
+            <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+              <textarea aria-label="Your reply" rows={3} maxLength={1000} value={text} onChange={(e) => setText(e.target.value)} style={{ border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8, fontSize: 13, background: theme.input, color: theme.text }} />
+              <div style={{ display: "flex", gap: 8 }}><Btn theme={theme} disabled={busy || text.trim().length < 3} onClick={() => send(r.id, text)}>Post reply</Btn><Btn theme={theme} kind="ghost" onClick={() => setReplying(null)}>Cancel</Btn></div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+              <Btn theme={theme} kind="ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => { setReplying(r.id); setText(r.sellerReply ?? ""); }}>{r.sellerReply ? "Edit reply" : "Reply"}</Btn>
+              {r.sellerReply && <Btn theme={theme} kind="ghost" style={{ padding: "4px 10px", fontSize: 12 }} disabled={busy} onClick={() => send(r.id, null)}>Remove reply</Btn>}
+              {r.reportedByYou ? <span style={{ fontSize: 12, color: theme.textMuted, alignSelf: "center" }}>Reported</span> : <Btn theme={theme} kind="danger" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => { setReportFor(r.id); setReportText(""); }}>Report</Btn>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { publicListing, searchCatalog } from "@/lib/store/public";
 import { requestOrigin } from "@/lib/store/origin";
-import { money, stockLabel, ProductGrid } from "@/components/store/product-card";
+import { money, stockLabel, ProductGrid, Stars } from "@/components/store/product-card";
+import type { ComponentType } from "react";
+import { Reviews as ReviewsBase } from "@/components/store/reviews";
+
+const Reviews = ReviewsBase as ComponentType<{ listingId?: string; seller?: string }>;
 import { AddToCart, Gallery, ShareButtons, VisitTracker } from "@/components/store/store-client";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +42,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
         <Gallery imageIds={item.imageIds} fallback={item.fallbackImageUrl} title={item.title} />
         <div>
           <h1 className="st-h1">{item.title}</h1>
+          {item.rating && <div style={{ marginTop: 4 }}><a href="#reviews" style={{ color: "inherit" }}><Stars average={item.rating.average} count={item.rating.count} size={16} /></a></div>}
           <div className="st-price" style={{ fontSize: 24, margin: "6px 0" }}>{money(item.price, item.currency)}</div>
           <div className={`st-stock ${s.cls}`} style={{ fontSize: 13, marginBottom: 14 }}>{s.text}</div>
           <AddToCart listingId={item.id} available={item.available} />
@@ -57,6 +62,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
           </div>
         </div>
       </div>
+      <div id="reviews" style={{ marginTop: 28 }}><Reviews listingId={item.id} /></div>
       {more.length > 0 && (
         <>
           <h2 className="st-h2">More from {item.seller.name} <a href={`/store/s/${item.seller.slug}`}>Visit seller</a></h2>

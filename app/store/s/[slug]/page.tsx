@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { publicSeller, searchCatalog } from "@/lib/store/public";
 import { requestOrigin } from "@/lib/store/origin";
-import { ProductGrid } from "@/components/store/product-card";
+import { ProductGrid, Stars } from "@/components/store/product-card";
+import type { ComponentType } from "react";
+import { Reviews as ReviewsBase } from "@/components/store/reviews";
+
+const Reviews = ReviewsBase as ComponentType<{ listingId?: string; seller?: string }>;
+import { sellerRating } from "@/lib/store/reviews";
 import { ShareButtons, VisitTracker } from "@/components/store/store-client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +31,7 @@ export default async function SellerPage({ params, searchParams }: { params: { s
   const origin = requestOrigin();
   const page = Math.max(1, Number(Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page) || 1);
   const result = await searchCatalog({ seller: s.slug, page });
+  const rating = await sellerRating(s.businessId).catch(() => null);
   const pages = Math.ceil(result.total / result.pageSize);
   return (
     <>
@@ -33,6 +39,7 @@ export default async function SellerPage({ params, searchParams }: { params: { s
       <div className="st-panel" style={{ marginBottom: 18 }}>
         <h1 className="st-h1">{s.business.name}</h1>
         <div className="st-mu">{[s.city, s.region, s.country].filter(Boolean).join(", ")} · Insight Store seller since {new Date(s.approvedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
+        {rating && <div style={{ margin: "6px 0" }}><a href="#reviews" style={{ color: "inherit" }}><Stars average={rating.average} count={rating.count} size={16} /></a></div>}
         {s.description && <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{s.description}</p>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, fontSize: 13, marginTop: 10 }}>
           {s.openingHours && <div><div className="st-label">Opening hours</div><div style={{ whiteSpace: "pre-wrap" }}>{s.openingHours}</div></div>}
@@ -53,6 +60,7 @@ export default async function SellerPage({ params, searchParams }: { params: { s
           {page < pages && <a href={`/store/s/${s.slug}?page=${page + 1}`}>Next →</a>}
         </div>
       )}
+      <div id="reviews" style={{ marginTop: 28 }}><Reviews seller={s.slug} /></div>
     </>
   );
 }
