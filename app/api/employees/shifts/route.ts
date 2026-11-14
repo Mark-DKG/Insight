@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
-import { requirePermission } from "@/lib/rbac";
+import { requirePermission, can } from "@/lib/rbac";
 import { moduleGate } from "@/lib/features";
 
 // GET /api/employees/shifts?userId=&branchId=&active=true
 export async function GET(request: Request) {
   const session = await getSession();
-  const seesAll = requirePermission(session, "employees:read");
-  if (!seesAll && !requirePermission(session, "shifts:own")) {
+  if (!session) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const seesAll = can(session, "employees:read");
+  if (!seesAll && !can(session, "shifts:own")) {
     return NextResponse.json({ error: "You don't have access to view shifts." }, { status: 403 });
   }
   const blocked = await moduleGate(session, "shifts");
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   // Without employees:read (cashiers) only your own shifts are visible.
-  const userId = seesAll ? (url.searchParams.get("userId") ?? undefined) : session!.sub;
+  const userId = seesAll ? (url.searchParams.get("userId") ?? undefined) : session.sub;
   const activeOnly = url.searchParams.get("active") === "true";
 
   const shifts = await prisma.employeeShift.findMany({
