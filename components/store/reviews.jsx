@@ -81,7 +81,7 @@ function ReportBox({ id, onDone }) {
   );
 }
 
-export function Reviews({ listingId, seller, title }) {
+export function Reviews({ listingId = undefined, seller = undefined, title = undefined }) {
   const target = listingId ? { listingId } : { seller };
   const q = listingId ? `listingId=${encodeURIComponent(listingId)}` : `seller=${encodeURIComponent(seller)}`;
   const [data, setData] = useState(null);
