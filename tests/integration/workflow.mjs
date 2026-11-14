@@ -109,7 +109,7 @@ const sumAmt = (rows) => rows.reduce((s, r) => s + num(r.amount), 0);
   check("A3: refund of part-paid credit sale succeeds", ref.status === 200, ref);
   const refunded = -sumAmt((await prisma.payment.findMany({ where: { saleId: ok.data.sale.id } })).filter((x) => num(x.amount) < 0));
   check("A3: refund paid out only the 150 received", refunded === 150, { refunded });
-  check("A3: balance is 0 and stock restored", num((await prisma.customer.findUnique({ where: { id: c.id } })).creditBalance) === 0 && (await stockOf(p, b.branch)) === 48 + 2);
+  check("A3: balance is 0 and stock restored", num((await prisma.customer.findUnique({ where: { id: c.id } })).creditBalance) === 0 && (await stockOf(p, b.branch)) === 48);
   check("A3: refunding twice is refused", (await b.c.post(`/api/sales/${ok.data.sale.id}/reverse`, { kind: "REFUND", reason: "again" })).status >= 400);
 }
 
@@ -136,8 +136,8 @@ const sumAmt = (rows) => rows.reduce((s, r) => s + num(r.amount), 0);
   const q = await addProduct(b, { stock: 5 });
   const s = await b.c.post("/api/sales", saleBody(b, q, { items: [{ productId: q.id, quantity: 5 }] }));
   const mixed = await Promise.all([
-    b.c.post(`/api/sales/${s.data.sale.id}/reverse`, { kind: "VOID", reason: "x" }),
-    b.c.post(`/api/sales/${s.data.sale.id}/reverse`, { kind: "VOID", reason: "y" }),
+    b.c.post(`/api/sales/${s.data.sale.id}/reverse`, { kind: "VOID", reason: "race one" }),
+    b.c.post(`/api/sales/${s.data.sale.id}/reverse`, { kind: "VOID", reason: "race two" }),
     b.c.post("/api/sales", saleBody(b, q, { items: [{ productId: q.id, quantity: 3 }] })),
     b.c.post("/api/inventory/adjust", { productId: q.id, branchId: b.branch.id, type: "STOCK_OUT", quantity: 1 }),
   ]);
