@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { checkStockAlerts } from "@/lib/notify";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { lockLevel, changeStock } from "@/lib/stock";
 
 // POST /api/inventory/adjust — manual stock changes, each logged as a movement.
 //
@@ -46,10 +47,10 @@ export async function POST(request: Request) {
       if (!product) throw new AdjustError("Product not found.");
       if (!branch) throw new AdjustError("Branch not found.");
 
-      const level = await tx.inventoryLevel.findUnique({
-        where: { productId_branchId: { productId: product.id, branchId: branch.id } },
-      });
-      const current = level?.quantity ?? 0;
+      // Take the row lock FIRST: every decision below is made from the
+      // committed quantity, and no concurrent sale/transfer can change it
+      // until this transaction ends (so nothing is overwritten from a stale read).
+      const current = await lockLevel(tx, product.id, branch.id);
 
       let delta: number;
       if (input.type === "COUNT_CORRECTION") {
@@ -73,11 +74,11 @@ export async function POST(request: Request) {
         );
       }
 
-      const updated = await tx.inventoryLevel.upsert({
-        where: { productId_branchId: { productId: product.id, branchId: branch.id } },
-        update: { quantity: current + delta },
-        create: { productId: product.id, branchId: branch.id, quantity: current + delta },
-      });
+      const newQuantity = await changeStock(tx, product.id, branch.id, delta);
+      if (newQuantity === null) {
+        throw new AdjustError(`Cannot remove ${Math.abs(delta)} from "${product.name}": the stock changed. Refresh and try again.`);
+      }
+      const updated = { quantity: newQuantity };
 
       const movement = await tx.inventoryMovement.create({
         data: {

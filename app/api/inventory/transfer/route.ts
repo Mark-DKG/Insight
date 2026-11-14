@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { checkStockAlerts } from "@/lib/notify";
 import { getSession } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
+import { lockLevel, removeStock, addStock } from "@/lib/stock";
 
 // POST /api/inventory/transfer — move stock between two branches atomically.
 const Schema = z.object({
@@ -44,25 +45,22 @@ export async function POST(request: Request) {
       if (branches.length !== 2) throw new TransferError("Branch not found.");
       const from = branches.find((b) => b.id === input.fromBranchId)!;
 
-      const source = await tx.inventoryLevel.findUnique({
-        where: { productId_branchId: { productId: product.id, branchId: from.id } },
-      });
-      const available = source?.quantity ?? 0;
+      // Lock both stock rows in a fixed (branch id) order so opposite
+      // transfers between the same two branches cannot deadlock, then move
+      // the units with conditional/atomic updates.
+      const lockOrder = [input.fromBranchId, input.toBranchId].sort();
+      const held = new Map<string, number>();
+      for (const branchId of lockOrder) held.set(branchId, await lockLevel(tx, product.id, branchId));
+      const available = held.get(input.fromBranchId) ?? 0;
       if (available < input.quantity) {
         throw new TransferError(
           `Cannot transfer ${input.quantity} of "${product.name}": only ${available} in stock at ${from.name}.`
         );
       }
-
-      await tx.inventoryLevel.update({
-        where: { productId_branchId: { productId: product.id, branchId: input.fromBranchId } },
-        data: { quantity: { decrement: input.quantity } },
-      });
-      await tx.inventoryLevel.upsert({
-        where: { productId_branchId: { productId: product.id, branchId: input.toBranchId } },
-        update: { quantity: { increment: input.quantity } },
-        create: { productId: product.id, branchId: input.toBranchId, quantity: input.quantity },
-      });
+      if (!(await removeStock(tx, product.id, input.fromBranchId, input.quantity))) {
+        throw new TransferError(`Cannot transfer ${input.quantity} of "${product.name}": the stock at ${from.name} changed. Refresh and try again.`);
+      }
+      await addStock(tx, product.id, input.toBranchId, input.quantity);
 
       const transferRef = crypto.randomUUID();
       await tx.inventoryMovement.createMany({

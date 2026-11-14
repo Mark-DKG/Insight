@@ -6,6 +6,7 @@ import { checkStockAlerts } from "@/lib/notify";
 import { getSession, tenantScope } from "@/lib/tenant";
 import { requirePermission } from "@/lib/rbac";
 import { moduleGate } from "@/lib/features";
+import { removeStock } from "@/lib/stock";
 
 // GET /api/sales — recent transactions list (dashboard, sales history page)
 export async function GET(request: Request) {
@@ -65,6 +66,12 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
+  // A cashier is bound to their assigned branch; the branch id from the
+  // client is never trusted on its own.
+  if (session.role === "CASHIER" && session.branchId && input.branchId !== session.branchId) {
+    return NextResponse.json({ error: "You can only record sales for your own branch." }, { status: 403 });
+  }
+
   let saleTimestamp: Date | null = null;
   if (input.occurredAt) {
     const t = new Date(input.occurredAt);
@@ -76,31 +83,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A credit sale must be linked to a customer." }, { status: 400 });
   }
 
-  // Idempotency: if this exact client transaction was already recorded
-  // (e.g. the offline queue retried a sync that actually succeeded), return
-  // the existing sale instead of creating a duplicate.
-  const existingSale = await prisma.sale.findUnique({
-    where: { businessId_clientTxnId: { businessId: session.businessId, clientTxnId: input.clientTxnId } },
-  });
-  if (existingSale) {
-    return NextResponse.json({ sale: existingSale, message: "Already recorded." }, { status: 200 });
-  }
+  // Idempotency: if this client transaction was already recorded (e.g. the
+  // offline queue retried a sync that actually succeeded), return the
+  // existing sale instead of creating a duplicate. A reused id with a
+  // DIFFERENT payload is refused rather than silently returning the old sale.
+  const replay = await replayExisting(session.businessId, input);
+  if (replay) return replay;
 
   try {
     const sale = await prisma.$transaction(async (tx) => {
-      const productIds = input.items.map((i) => i.productId);
+      // ---- ownership: branch and customer must belong to this business ----
+      const branch = await tx.branch.findFirst({ where: { id: input.branchId, businessId: session.businessId }, select: { id: true } });
+      if (!branch) throw new SaleError("Branch not found for this business.", 404);
+
+      let customer: { id: string; name: string } | null = null;
+      if (input.customerId) {
+        customer = await tx.customer.findFirst({ where: { id: input.customerId, businessId: session.businessId }, select: { id: true, name: true } });
+        if (!customer) throw new SaleError("Customer not found for this business.", 404);
+      }
+
+      const productIds = Array.from(new Set(input.items.map((i) => i.productId)));
       const products = await tx.product.findMany({
         where: { id: { in: productIds }, businessId: session.businessId, isActive: true },
       });
-
       if (products.length !== productIds.length) {
         throw new SaleError("One or more products are unavailable or don't belong to this business.");
       }
-
-      const inventoryLevels = await tx.inventoryLevel.findMany({
-        where: { productId: { in: productIds }, branchId: input.branchId },
-      });
-      const levelByProduct = new Map(inventoryLevels.map((l) => [l.productId, l]));
 
       let subtotal = new Prisma.Decimal(0);
       let costOfGoods = new Prisma.Decimal(0);
@@ -108,18 +116,11 @@ export async function POST(request: Request) {
 
       for (const item of input.items) {
         const product = products.find((p) => p.id === item.productId)!;
-        const level = levelByProduct.get(item.productId);
-        const available = level?.quantity ?? 0;
-
-        // Business rule #2: inventory cannot go negative unless an
-        // administrator has explicitly enabled it elsewhere — not done here.
-        if (available < item.quantity) {
-          throw new SaleError(
-            `Sale could not be completed because the available stock for "${product.name}" is insufficient.`
-          );
+        const gross = product.sellingPrice.mul(item.quantity);
+        if (new Prisma.Decimal(item.discount).gt(gross)) {
+          throw new SaleError(`The discount on "${product.name}" is larger than the line total.`, 400);
         }
-
-        const lineTotal = product.sellingPrice.mul(item.quantity).sub(item.discount);
+        const lineTotal = gross.sub(item.discount);
         const lineCost = product.costPrice.mul(item.quantity);
 
         subtotal = subtotal.add(lineTotal);
@@ -140,8 +141,42 @@ export async function POST(request: Request) {
       const totalAmount = subtotal.sub(discountAmount);
       const grossProfit = subtotal.sub(discountAmount).sub(costOfGoods);
 
+      // ---- stock: one conditional UPDATE per line (see lib/stock.ts) -------
+      // Business rule #2: inventory cannot go negative. Lines are processed in
+      // a fixed order so concurrent multi-line sales cannot deadlock.
+      const ordered = [...input.items].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0));
+      for (const item of ordered) {
+        if (!(await removeStock(tx, item.productId, input.branchId, item.quantity))) {
+          const name = products.find((p) => p.id === item.productId)!.name;
+          throw new SaleError(`Sale could not be completed because the available stock for "${name}" is insufficient.`);
+        }
+      }
+
+      // ---- credit limit: enforced under a row lock on the customer ---------
+      if (input.paymentMethod === "CREDIT" && customer) {
+        const rows = await tx.$queryRaw<{ creditBalance: Prisma.Decimal; creditLimit: Prisma.Decimal }[]>`
+          SELECT "creditBalance", "creditLimit" FROM "Customer" WHERE "id" = ${customer.id} AND "businessId" = ${session.businessId} FOR UPDATE`;
+        const locked = rows[0];
+        if (!locked) throw new SaleError("Customer not found for this business.", 404);
+        const balance = new Prisma.Decimal(locked.creditBalance);
+        const limit = new Prisma.Decimal(locked.creditLimit);
+        if (limit.lte(0)) {
+          throw new SaleError(`${customer.name} has no credit limit set, so credit sales are not allowed. Set a credit limit on the customer first.`);
+        }
+        if (balance.add(totalAmount).gt(limit)) {
+          throw new SaleError(
+            `This sale would take ${customer.name}'s credit to ${balance.add(totalAmount).toFixed(2)}, above their limit of ${limit.toFixed(2)} (currently owing ${balance.toFixed(2)}).`
+          );
+        }
+      }
+
+      // ---- the sale: receipt numbers are allocated under a per-business lock
+      // held until commit, so concurrent sales cannot take the same number and
+      // a rolled-back sale never consumes one. -------------------------------
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"receipt:" + session.businessId}))`;
       const receiptNumber = await nextReceiptNumber(tx, session.businessId);
 
+      const isCredit = input.paymentMethod === "CREDIT";
       const created = await tx.sale.create({
         data: {
           businessId: session.businessId,
@@ -160,20 +195,15 @@ export async function POST(request: Request) {
           clientTxnId: input.clientTxnId,
           status: "COMPLETED",
           items: { createMany: { data: saleItemsData } },
-          payments: {
-            create: { method: input.paymentMethod, amount: totalAmount },
-          },
+          // Money is recorded only when it is actually received. A credit
+          // sale creates a credit account instead; collections are recorded as
+          // CreditPayment rows when the customer pays.
+          ...(isCredit ? {} : { payments: { create: { method: input.paymentMethod, amount: totalAmount } } }),
         },
         include: { items: true },
       });
 
-      // Decrement inventory and log the movement for every line item.
-      for (const item of input.items) {
-        await tx.inventoryLevel.update({
-          where: { productId_branchId: { productId: item.productId, branchId: input.branchId } },
-          data: { quantity: { decrement: item.quantity } },
-        });
-
+      for (const item of ordered) {
         await tx.inventoryMovement.create({
           data: {
             businessId: session.businessId,
@@ -187,19 +217,17 @@ export async function POST(request: Request) {
         });
       }
 
-      // Credit sales open (or add to) the customer's credit account and
-      // running balance; business rule #9.
-      if (input.paymentMethod === "CREDIT" && input.customerId) {
+      if (isCredit && customer) {
         await tx.creditAccount.create({
           data: {
-            customerId: input.customerId,
+            customerId: customer.id,
             saleId: created.id,
             originalAmount: totalAmount,
             dueDate: input.creditDueDate ? new Date(input.creditDueDate) : undefined,
           },
         });
         await tx.customer.update({
-          where: { id: input.customerId },
+          where: { id: customer.id },
           data: { creditBalance: { increment: totalAmount } },
         });
       }
@@ -208,6 +236,7 @@ export async function POST(request: Request) {
         data: {
           businessId: session.businessId,
           userId: session.sub,
+          branchId: input.branchId,
           action: "SALE_COMPLETED",
           entityType: "Sale",
           entityId: created.id,
@@ -216,13 +245,20 @@ export async function POST(request: Request) {
       });
 
       return created;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     await checkStockAlerts(session.businessId, input.items.map((i) => i.productId)).catch((e) => console.error("Stock alert check failed:", e));
     return NextResponse.json({ sale }, { status: 201 });
   } catch (error) {
     if (error instanceof SaleError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    // Two requests with the same clientTxnId raced: the database's unique
+    // constraint let exactly one through and rolled the other back completely
+    // (stock included). Answer the loser with the sale that was recorded.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const again = await replayExisting(session.businessId, input);
+      if (again) return again;
     }
     console.error("Sale creation failed:", error);
     return NextResponse.json(
@@ -232,7 +268,32 @@ export async function POST(request: Request) {
   }
 }
 
-class SaleError extends Error {}
+class SaleError extends Error {
+  constructor(message: string, public status = 409) { super(message); }
+}
+
+type SaleInput = z.infer<typeof CreateSaleSchema>;
+
+async function replayExisting(businessId: string, input: SaleInput): Promise<NextResponse | null> {
+  const existing = await prisma.sale.findUnique({
+    where: { businessId_clientTxnId: { businessId, clientTxnId: input.clientTxnId } },
+    include: { items: true },
+  });
+  if (!existing) return null;
+  const key = (rows: { productId: string; quantity: number }[]) => rows.map((r) => `${r.productId}:${r.quantity}`).sort().join("|");
+  const same =
+    existing.branchId === input.branchId &&
+    existing.paymentMethod === input.paymentMethod &&
+    (existing.customerId ?? null) === (input.customerId ?? null) &&
+    key(existing.items) === key(input.items);
+  if (!same) {
+    return NextResponse.json(
+      { error: "This transaction id was already used for a different sale. Nothing was recorded.", code: "TXN_ID_CONFLICT" },
+      { status: 409 }
+    );
+  }
+  return NextResponse.json({ sale: existing, message: "Already recorded." }, { status: 200 });
+}
 
 async function nextReceiptNumber(tx: Prisma.TransactionClient, businessId: string): Promise<string> {
   const count = await tx.sale.count({ where: { businessId } });
