@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { publicSeller, searchCatalog } from "@/lib/store/public";
 import { requestOrigin } from "@/lib/store/origin";
 import { ProductGrid, Stars } from "@/components/store/product-card";
-import { Reviews } from "@/components/store/reviews";
+import type { ComponentType } from "react";
+import { Reviews as ReviewsBase } from "@/components/store/reviews";
+
+const Reviews = ReviewsBase as ComponentType<{ listingId?: string; seller?: string }>;
 import { sellerRating } from "@/lib/store/reviews";
 import { ShareButtons, VisitTracker } from "@/components/store/store-client";
 

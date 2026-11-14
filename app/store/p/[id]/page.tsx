@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { publicListing, searchCatalog } from "@/lib/store/public";
 import { requestOrigin } from "@/lib/store/origin";
 import { money, stockLabel, ProductGrid, Stars } from "@/components/store/product-card";
-import { Reviews } from "@/components/store/reviews";
+import type { ComponentType } from "react";
+import { Reviews as ReviewsBase } from "@/components/store/reviews";
+
+const Reviews = ReviewsBase as ComponentType<{ listingId?: string; seller?: string }>;
 import { AddToCart, Gallery, ShareButtons, VisitTracker } from "@/components/store/store-client";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +62,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
           </div>
         </div>
       </div>
-      <div id="reviews" style={{ marginTop: 28 }}><Reviews listingId={item.id} title={item.title} /></div>
+      <div id="reviews" style={{ marginTop: 28 }}><Reviews listingId={item.id} /></div>
       {more.length > 0 && (
         <>
           <h2 className="st-h2">More from {item.seller.name} <a href={`/store/s/${item.seller.slug}`}>Visit seller</a></h2>
