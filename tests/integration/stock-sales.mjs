@@ -1,7 +1,7 @@
 // Stock and sales integrity: characterisation of current behaviour (check)
-// plus regression tests for audit findings that currently FAIL (defect).
+// plus regression guards for the audit findings fixed in Phase A (regression).
 //   BASE=http://localhost:3000 DATABASE_URL=<disposable db> node tests/integration/stock-sales.mjs
-import { check, defect, finish, prisma, newBusiness, addBranch, addProduct, addCustomer, saleBody, stockOf, all, setStock, uid } from "./_lib.mjs";
+import { check, regression, finish, prisma, newBusiness, addBranch, addProduct, addCustomer, saleBody, stockOf, all, setStock, uid } from "./_lib.mjs";
 
 const b = await newBusiness("stock");
 const b2 = await newBusiness("other");
@@ -74,8 +74,8 @@ const b2 = await newBusiness("other");
   const rs = await all(15, () => b.c.post("/api/sales", saleBody(b, p)));
   const ok = rs.filter((r) => r.status === 201).length;
   const stock = await stockOf(p, b.branch);
-  defect("F-016", "15 parallel 1-unit sales against 5 in stock: at most 5 succeed", ok <= 5, { ok });
-  defect("F-016", "stock never goes negative under parallel sales", stock >= 0, { stock });
+  regression("F-016", "15 parallel 1-unit sales against 5 in stock: at most 5 succeed", ok <= 5, { ok });
+  regression("F-016", "stock never goes negative under parallel sales", stock >= 0, { stock });
   check("parallel sales: stock + sold units reconcile with the 5 received", stock + ok === 5, { stock, ok });
 }
 
@@ -92,7 +92,7 @@ const b2 = await newBusiness("other");
     const expected = 20 + (a.status === 201 ? 5 : 0) - sold;
     if ((await stockOf(p, b.branch)) !== expected) lost++;
   }
-  defect("F-017", "stock adjustment racing with sales never loses an update (8 rounds)", lost === 0, { roundsWithLostUpdate: lost });
+  regression("F-017", "stock adjustment racing with sales never loses an update (8 rounds)", lost === 0, { roundsWithLostUpdate: lost });
 }
 
 // ---- F-018 transfer race ----------------------------------------------------
@@ -102,8 +102,8 @@ const b2 = await newBusiness("other");
   const rs = await all(10, () => b.c.post("/api/inventory/transfer", { productId: p.id, fromBranchId: b.branch.id, toBranchId: br2.id, quantity: 1 }));
   const ok = rs.filter((r) => r.status === 201).length;
   const src = await stockOf(p, b.branch), dst = await stockOf(p, br2);
-  defect("F-018", "10 parallel 1-unit transfers of 5 units: at most 5 succeed", ok <= 5, { ok });
-  defect("F-018", "source branch never negative after parallel transfers", src >= 0, { src });
+  regression("F-018", "10 parallel 1-unit transfers of 5 units: at most 5 succeed", ok <= 5, { ok });
+  regression("F-018", "source branch never negative after parallel transfers", src >= 0, { src });
   check("transfers: total stock conserved", src + dst === 5, { src, dst });
 }
 
@@ -113,7 +113,7 @@ const b2 = await newBusiness("other");
   let rejected = false;
   try { await prisma.inventoryLevel.update({ where: { productId_branchId: { productId: p.id, branchId: b.branch.id } }, data: { quantity: -1 } }); }
   catch { rejected = true; }
-  defect("F-016", "database rejects negative inventory quantity (CHECK quantity >= 0)", rejected);
+  regression("F-016", "database rejects negative inventory quantity (CHECK quantity >= 0)", rejected);
   // restore so later checks are unaffected
   await prisma.inventoryLevel.update({ where: { productId_branchId: { productId: p.id, branchId: b.branch.id } }, data: { quantity: 1 } }).catch(() => {});
 }
@@ -126,7 +126,7 @@ const b2 = await newBusiness("other");
   const sales = await prisma.sale.count({ where: { businessId: b.businessId, clientTxnId: txn } });
   check("concurrent duplicate txn: exactly one sale row", sales === 1, { sales });
   check("concurrent duplicate txn: stock deducted once", (await stockOf(p, b.branch)) === 9);
-  defect("F-021", "concurrent duplicate txn: no 500s, all callers get the one sale", rs.every((r) => [200, 201].includes(r.status) && r.data?.sale?.id), rs.map((r) => r.status));
+  regression("F-021", "concurrent duplicate txn: no 500s, all callers get the one sale", rs.every((r) => [200, 201].includes(r.status) && r.data?.sale?.id), rs.map((r) => r.status));
 }
 
 // ---- F-020 receipt numbers under concurrency ------------------------------
@@ -136,7 +136,7 @@ const b2 = await newBusiness("other");
   const ok = rs.filter((r) => r.status === 201);
   const nums = new Set(ok.map((r) => r.data.sale.receiptNumber));
   check("receipts: numbers unique across sales that succeeded", nums.size === ok.length);
-  defect("F-020", "10 parallel sales all succeed with unique receipt numbers", ok.length === 10, { succeeded: ok.length, statuses: rs.map((r) => r.status) });
+  regression("F-020", "10 parallel sales all succeed with unique receipt numbers", ok.length === 10, { succeeded: ok.length, statuses: rs.map((r) => r.status) });
 }
 
 // ---- F-001 / F-002 ownership ------------------------------------------------
@@ -146,14 +146,14 @@ const b2 = await newBusiness("other");
   const before = Number((await prisma.customer.findUnique({ where: { id: foreignCustomer.id } })).creditBalance);
   const r = await b.c.post("/api/sales", saleBody(b, p, { paymentMethod: "CREDIT", customerId: foreignCustomer.id }));
   const after = Number((await prisma.customer.findUnique({ where: { id: foreignCustomer.id } })).creditBalance);
-  defect("F-001", "sale with another business's customer is rejected", r.status >= 400 && r.status < 500, r.status);
-  defect("F-001", "another business's customer balance is untouched", after === before, { before, after });
+  regression("F-001", "sale with another business's customer is rejected", r.status >= 400 && r.status < 500, r.status);
+  regression("F-001", "another business's customer balance is untouched", after === before, { before, after });
 
   const foreignBranch = b2.branch;
   const r2 = await b.c.post("/api/sales", saleBody(b, p, { branchId: foreignBranch.id }));
-  defect("F-002", "sale into another business's branch is rejected", r2.status >= 400 && r2.status < 500, r2.status);
+  regression("F-002", "sale into another business's branch is rejected", r2.status >= 400 && r2.status < 500, r2.status);
   const nsale = await prisma.sale.count({ where: { businessId: b.businessId, branchId: foreignBranch.id } });
-  defect("F-002", "no sale row references another business's branch", nsale === 0, { nsale });
+  regression("F-002", "no sale row references another business's branch", nsale === 0, { nsale });
 }
 
 // ---- F-019 credit limit ------------------------------------------------------
@@ -163,18 +163,18 @@ const b2 = await newBusiness("other");
   const first = await b.c.post("/api/sales", saleBody(b, p, { paymentMethod: "CREDIT", customerId: c.id }));
   check("credit: first 100 sale within limit 150 accepted", first.status === 201, first);
   const second = await b.c.post("/api/sales", saleBody(b, p, { paymentMethod: "CREDIT", customerId: c.id }));
-  defect("F-019", "credit sale pushing balance to 200 over limit 150 is rejected", second.status === 409 || second.status === 400 || second.status === 422, second.status);
+  regression("F-019", "credit sale pushing balance to 200 over limit 150 is rejected", second.status === 409 || second.status === 400 || second.status === 422, second.status);
   const c2 = await addCustomer(b, 150);
   const par = await all(5, () => b.c.post("/api/sales", saleBody(b, p, { paymentMethod: "CREDIT", customerId: c2.id })));
   const bal = Number((await prisma.customer.findUnique({ where: { id: c2.id } })).creditBalance);
-  defect("F-019", "parallel credit sales cannot exceed the limit (balance <= 150)", bal <= 150, { balance: bal, accepted: par.filter((r) => r.status === 201).length });
+  regression("F-019", "parallel credit sales cannot exceed the limit (balance <= 150)", bal <= 150, { balance: bal, accepted: par.filter((r) => r.status === 201).length });
 }
 
 // ---- discount validation ----------------------------------------------------
 {
   const p = await addProduct(b, { price: 10, stock: 5 });
   const r = await b.c.post("/api/sales", saleBody(b, p, { items: [{ productId: p.id, quantity: 1, discount: 500 }] }));
-  defect("A2", "line discount larger than the line total is rejected (no negative sale)", r.status >= 400 && r.status < 500, { status: r.status, total: r.data?.sale?.totalAmount });
+  regression("A2", "line discount larger than the line total is rejected (no negative sale)", r.status >= 400 && r.status < 500, { status: r.status, total: r.data?.sale?.totalAmount });
 }
 
 await finish();

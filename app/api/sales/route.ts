@@ -95,6 +95,10 @@ export async function POST(request: Request) {
       // ---- ownership: branch and customer must belong to this business ----
       const branch = await tx.branch.findFirst({ where: { id: input.branchId, businessId: session.businessId }, select: { id: true } });
       if (!branch) throw new SaleError("Branch not found for this business.", 404);
+      // A cashier assigned to a branch can only sell from that branch.
+      if (session.role === "CASHIER" && session.branchId && session.branchId !== branch.id) {
+        throw new SaleError("You can only record sales for the branch you are assigned to.", 403);
+      }
 
       let customer: { id: string; name: string } | null = null;
       if (input.customerId) {

@@ -1,6 +1,6 @@
 // Payments, credit, refunds, reversals. Characterisation + regression tests
 // for F-022 / F-023 / F-024.
-import { check, defect, finish, prisma, newBusiness, addProduct, addCustomer, saleBody, stockOf, all } from "./_lib.mjs";
+import { check, regression, finish, prisma, newBusiness, addProduct, addCustomer, saleBody, stockOf, all } from "./_lib.mjs";
 
 const b = await newBusiness("fin");
 const sum = (rows) => rows.reduce((s, r) => s + Number(r.amount), 0);
@@ -25,7 +25,7 @@ let creditSale, cust, prod;
   const acct = await prisma.creditAccount.findUnique({ where: { saleId: creditSale.id } });
   check("credit sale: credit account opened for 200", Number(acct.originalAmount) === 200);
   check("credit sale: customer balance 200", Number((await prisma.customer.findUnique({ where: { id: cust.id } })).creditBalance) === 200);
-  defect("F-023", "credit sale records no cash payment (nothing received yet)", sum(await payments(creditSale.id)) === 0, { recorded: sum(await payments(creditSale.id)) });
+  regression("F-023", "credit sale records no cash payment (nothing received yet)", sum(await payments(creditSale.id)) === 0, { recorded: sum(await payments(creditSale.id)) });
 }
 
 // customer payment collection characterisation
@@ -47,7 +47,7 @@ let creditSale, cust, prod;
   check("refund: customer balance back to 0 (only unpaid credit removed)", Number((await prisma.customer.findUnique({ where: { id: cust.id } })).creditBalance) === 0);
   const pay = await payments(creditSale.id);
   const refunded = -sum(pay.filter((x) => Number(x.amount) < 0));
-  defect("F-023", "refund of a credit sale pays out at most what was actually received (80)", refunded <= 80, { refunded });
+  regression("F-023", "refund of a credit sale pays out at most what was actually received (80)", refunded <= 80, { refunded });
 }
 
 // cash refund + double reversal
@@ -76,8 +76,8 @@ let creditSale, cust, prod;
     if (rs.filter((r) => r.status === 200).length > 1) bothOk++;
     if ((await stockOf(p, b.branch)) !== 3) doubleReturn++;
   }
-  defect("F-022", "5 parallel voids of one sale: exactly one succeeds (6 rounds)", bothOk === 0, { roundsWithMultipleSuccess: bothOk });
-  defect("F-022", "5 parallel voids: stock returned exactly once (6 rounds)", doubleReturn === 0, { roundsWithWrongStock: doubleReturn });
+  regression("F-022", "5 parallel voids of one sale: exactly one succeeds (6 rounds)", bothOk === 0, { roundsWithMultipleSuccess: bothOk });
+  regression("F-022", "5 parallel voids: stock returned exactly once (6 rounds)", doubleReturn === 0, { roundsWithWrongStock: doubleReturn });
 }
 
 // F-024 concurrent credit payments cannot overpay
@@ -88,7 +88,7 @@ let creditSale, cust, prod;
   const rs = await all(5, () => b.c.post(`/api/customers/${c.id}/payments`, { amount: 100, method: "CASH" }));
   const bal = Number((await prisma.customer.findUnique({ where: { id: c.id } })).creditBalance);
   const acct = await prisma.creditAccount.findFirst({ where: { customerId: c.id } });
-  defect("F-024", "5 parallel payments of the full 100 owed: balance never negative", bal >= 0, { balance: bal });
+  regression("F-024", "5 parallel payments of the full 100 owed: balance never negative", bal >= 0, { balance: bal });
   check("credit: customer balance equals account outstanding", bal === Number(acct.originalAmount) - Number(acct.amountPaid), { bal, acct });
 }
 

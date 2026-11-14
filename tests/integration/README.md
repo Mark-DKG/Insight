@@ -11,13 +11,10 @@ npm run build && npm start &            # or: npm run dev
 BASE=http://localhost:3000 npm run test:integration
 ```
 
-## Known-defect tests
+## Regression guards
 
-`defect(id, name, cond)` records a regression test for an audit finding that is
-**expected to fail until the fix lands**:
-
-- `XFAIL` – defect still present (does not fail the run).
-- `XPASS` – the defect is fixed; promote the check to `check()`.
-- `STRICT=1` – treat every `XFAIL` as a failure (used once all fixes are in).
+`regression(id, name, cond)` guards an audit finding fixed in Phase A. Each was
+first written to fail against the original code (baseline CI run 43606686442
+recorded them as XFAIL) and must now pass; a failure means the defect is back.
 
 Tests never change their expectation to make a defect pass.

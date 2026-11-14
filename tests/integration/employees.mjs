@@ -1,5 +1,5 @@
 // Employee permissions and shifts. F-029 / F-030.
-import { check, defect, finish, prisma, newBusiness, addEmployee, addProduct, saleBody, addBranch } from "./_lib.mjs";
+import { check, regression, finish, prisma, newBusiness, addEmployee, addProduct, saleBody, addBranch } from "./_lib.mjs";
 
 const b = await newBusiness("emp");
 const cashier = await addEmployee(b, "CASHIER");
@@ -20,13 +20,13 @@ check("employees: cashier and manager can sign in", cashier.loginStatus === 200 
 // F-029 cashier own shift
 {
   const open = await cashier.c.post("/api/employees/shifts", { branchId: b.branch.id });
-  defect("F-029", "cashier can open their own shift", open.status === 201, open.status);
+  regression("F-029", "cashier can open their own shift", open.status === 201, open.status);
   // owner opens one so the close/other-shift rules can still be exercised
   const ownerOpen = await b.c.post("/api/employees/shifts", { branchId: b.branch.id, userId: cashier.id });
   check("owner can open a shift on behalf of a cashier", ownerOpen.status === 201 || open.status === 201, ownerOpen);
   const shift = open.data?.shift ?? ownerOpen.data?.shift;
   const close = await cashier.c.post(`/api/employees/shifts/${shift.id}/end`, { actualCash: 0 });
-  defect("F-029", "cashier can close their own shift", close.status === 200, close.status);
+  regression("F-029", "cashier can close their own shift", close.status === 200, close.status);
 
   const other = (await b.c.post("/api/employees/shifts", { branchId: b.branch.id, userId: cashier2.id })).data.shift;
   const steal = await cashier.c.post(`/api/employees/shifts/${other.id}/end`, { actualCash: 0 });
@@ -38,11 +38,11 @@ check("employees: cashier and manager can sign in", cashier.loginStatus === 200 
 {
   const e = await addEmployee(b, "CASHIER");
   const patch = await b.c.patch(`/api/employees/${e.id}`, { isActive: false });
-  defect("F-030", "owner can suspend an employee", patch.status === 200, patch.status);
+  regression("F-030", "owner can suspend an employee", patch.status === 200, patch.status);
   const after = (await prisma.user.findUnique({ where: { id: e.id } })).isActive;
-  defect("F-030", "suspended employee is flagged inactive", after === false, { isActive: after });
+  regression("F-030", "suspended employee is flagged inactive", after === false, { isActive: after });
   const stillIn = await e.c.get("/api/sales");
-  defect("F-030", "suspended employee loses API access immediately", stillIn.status === 401 || stillIn.status === 403, stillIn.status);
+  regression("F-030", "suspended employee loses API access immediately", stillIn.status === 401 || stillIn.status === 403, stillIn.status);
 }
 
 await finish();

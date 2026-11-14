@@ -10,25 +10,23 @@ export const BASE = process.env.BASE ?? "http://localhost:3000";
 export const RUN = Date.now().toString(36);
 export const prisma = new PrismaClient();
 
-// STRICT=1: a known defect that still fails is an error (use once fixed).
-const STRICT = process.env.STRICT === "1";
-let passed = 0, failed = 0, xfail = 0, xpass = 0;
+let passed = 0, failed = 0;
 
 export const check = (name, cond, extra) => {
   if (cond) { passed++; console.log("PASS " + name); }
   else { failed++; console.log("FAIL " + name + (extra !== undefined ? "  :: " + JSON.stringify(extra).slice(0, 600) : "")); }
 };
 
-// A regression test for an audit finding that is expected to FAIL until the
-// fix lands. XFAIL = defect still present. XPASS = defect fixed (promote it).
-export const defect = (id, name, cond, extra) => {
-  if (cond) { xpass++; console.log(`XPASS [${id}] ${name}`); }
-  else if (STRICT) { failed++; console.log(`FAIL [${id}] ${name}` + (extra !== undefined ? "  :: " + JSON.stringify(extra).slice(0, 600) : "")); }
-  else { xfail++; console.log(`XFAIL [${id}] ${name} (known defect)` + (extra !== undefined ? "  :: " + JSON.stringify(extra).slice(0, 300) : "")); }
+// Regression guard for an audit finding that Phase A fixed. It was written to
+// FAIL against the original code (see docs/INSIGHT_PHASE_A_IMPLEMENTATION_REPORT.md
+// for the baseline run) and must now pass; a failure here means the defect is back.
+export const regression = (id, name, cond, extra) => {
+  if (cond) { passed++; console.log(`ok   [${id}] ${name}`); }
+  else { failed++; console.log(`FAIL [${id}] ${name}` + (extra !== undefined ? "  :: " + JSON.stringify(extra).slice(0, 600) : "")); }
 };
 
 export async function finish() {
-  console.log(`\n${passed} passed, ${failed} failed, ${xfail} known-defect (expected fail), ${xpass} known-defect now passing`);
+  console.log(`\n${passed} passed, ${failed} failed`);
   await prisma.$disconnect();
   process.exit(failed ? 1 : 0);
 }
