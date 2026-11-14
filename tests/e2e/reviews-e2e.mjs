@@ -137,11 +137,11 @@ async function main() {
   const list = await S.get("/api/seller/orders?status=");
   const orderId = (list.data?.orders ?? []).find((o) => o.reference === ref)?.id;
   check("seller sees the order", !!orderId, list.data?.orders?.length);
-  for (const action of ["confirm", "ready"]) {
+  for (const action of ["confirm", "ready", "record_payment"]) {
     const r = await S.post(`/api/seller/orders/${orderId}/action`, { action });
     check(`seller ${action}`, r.status === 200, r.data);
   }
-  check("READY order still does not unlock reviews", (await A.post("/api/store/public/reviews", { listingId: listing, rating: 5 })).status === 403);
+  check("paid and ready (not completed) order still does not unlock reviews", (await A.post("/api/store/public/reviews", { listingId: listing, rating: 5 })).status === 403);
 
   // a guest buyer completing an order grants nobody anything
   const GB = await client("guestbuyer");
