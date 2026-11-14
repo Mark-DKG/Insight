@@ -428,6 +428,7 @@ export function SearchSort({ value }) {
       router.push(u.pathname + u.search);
     }}>
       <option value="">Recommended</option>
+      <option value="rating">Top rated</option>
       <option value="newest">Newest</option>
       <option value="price_asc">Price: low to high</option>
       <option value="price_desc">Price: high to low</option>

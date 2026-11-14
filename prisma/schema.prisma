@@ -169,6 +169,7 @@ model Business {
   storeApplications  StoreSellerApplication[]
   storeSeller        StoreSeller?
   storeListings      StoreListing[]
+  storeReviews       StoreReview[]
   storeOrders        StoreOrder[]
 
   @@index([name])
@@ -976,6 +977,7 @@ model StoreListing {
   images     StoreImage[]
   cartItems  StoreCartItem[]
   orderItems StoreOrderItem[]
+  reviews    StoreReview[]
 
   @@index([businessId, status])
   @@index([status, isVisible, publishedAt])
@@ -1153,6 +1155,7 @@ model StoreShopper {
 
   sessions StoreShopperSession[]
   orders   StoreOrder[]
+  reviews  StoreReview[]
 }
 
 // Opaque random token in an httpOnly cookie; only its SHA-256 hash is stored,
@@ -1230,4 +1233,57 @@ model EmailSetting {
   centralAddress String?
   updatedBy      String?
   updatedAt      DateTime @default(now()) @updatedAt
+}
+
+// ----------------------------------------------------------------------------
+// Insight Store reviews. Registered shoppers only, and only after a COMPLETED
+// order from that seller (product reviews: an order containing the product).
+// ----------------------------------------------------------------------------
+
+model StoreReview {
+  id              String    @id @default(uuid())
+  // P:<shopperId>:<listingId> or S:<shopperId>:<businessId>; one review each.
+  dedupeKey       String    @unique
+  kind            String // PRODUCT | STORE
+  shopperId       String
+  businessId      String
+  listingId       String?
+  orderId         String
+  rating          Int
+  comment         String?
+  // "Ama K." — first name and initial only, fixed when the review is written.
+  displayName     String
+  status          String    @default("VISIBLE") // VISIBLE | HIDDEN
+  hiddenReason    String?
+  hiddenAt        DateTime?
+  hiddenByAdminId String?
+  sellerReply     String?
+  sellerRepliedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  shopper StoreShopper        @relation(fields: [shopperId], references: [id], onDelete: Cascade)
+  business Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  listing StoreListing?       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reports StoreReviewReport[]
+
+  @@index([listingId, status, createdAt])
+  @@index([businessId, kind, status, createdAt])
+  @@index([shopperId])
+}
+
+model StoreReviewReport {
+  id           String    @id @default(uuid())
+  reviewId     String
+  // shopper:<id> or business:<id>; one report per reporter per review.
+  reporterKey  String
+  reporterType String // SHOPPER | SELLER
+  reason       String
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  review StoreReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, reporterKey])
+  @@index([resolvedAt, createdAt])
 }

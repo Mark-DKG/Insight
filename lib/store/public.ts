@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { availabilityFor } from "./server";
 import { PUBLIC_LISTING_WHERE } from "./listing";
+import { listingRatings } from "./reviews";
 
 // Read-only queries behind the public marketplace. Everything here returns
 // only public-safe fields: no costs, no internal stock figures beyond a
@@ -19,6 +20,7 @@ export type PublicListing = {
   available: number;
   isFeatured: boolean;
   publishedAt: string | null;
+  rating: { average: number; count: number } | null;
   seller: { name: string; slug: string; city: string | null; region: string | null; offersDelivery: boolean; offersCollection: boolean };
 };
 
@@ -33,7 +35,10 @@ const listingSelect = {
 type Row = Prisma.StoreListingGetPayload<{ select: typeof listingSelect }>;
 
 async function toPublic(rows: Row[]): Promise<PublicListing[]> {
-  const stock = await availabilityFor(rows.map((r) => ({ productId: r.productId, businessId: r.businessId })));
+  const [stock, ratings] = await Promise.all([
+    availabilityFor(rows.map((r) => ({ productId: r.productId, businessId: r.businessId }))),
+    listingRatings(rows.map((r) => r.id)).catch(() => new Map<string, { average: number; count: number }>()),
+  ]);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -46,6 +51,7 @@ async function toPublic(rows: Row[]): Promise<PublicListing[]> {
     available: stock.get(r.productId) ?? 0,
     isFeatured: r.isFeatured,
     publishedAt: r.publishedAt?.toISOString() ?? null,
+    rating: ratings.get(r.id) ?? null,
     seller: {
       name: r.business.name, slug: r.business.storeSeller?.slug ?? "", city: r.business.storeSeller?.city ?? null, region: r.business.storeSeller?.region ?? null,
       offersDelivery: !!r.business.storeSeller?.offersDelivery, offersCollection: !!r.business.storeSeller?.offersCollection,
@@ -87,6 +93,7 @@ export async function searchCatalog(query: CatalogQuery) {
   if (query.maxPrice !== undefined) items = items.filter((i) => i.price <= query.maxPrice!);
   if (query.sort === "price_asc") items.sort((a, b) => a.price - b.price);
   if (query.sort === "price_desc") items.sort((a, b) => b.price - a.price);
+  if (query.sort === "rating") items.sort((a, b) => (b.rating?.average ?? 0) - (a.rating?.average ?? 0) || (b.rating?.count ?? 0) - (a.rating?.count ?? 0));
   if (query.sort === "newest") items.sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
   const pageSize = Math.min(48, Math.max(1, query.pageSize ?? 24));
   const page = Math.max(1, query.page ?? 1);
@@ -119,7 +126,7 @@ export async function publicSeller(slug: string) {
     select: {
       slug: true, description: true, city: true, region: true, country: true, publicPhone: true, publicEmail: true, openingHours: true,
       offersDelivery: true, deliveryInfo: true, offersCollection: true, collectionInfo: true, whatsappNumber: true, approvedAt: true,
-      business: { select: { name: true } },
+      businessId: true, business: { select: { name: true } },
     },
   });
   return s;
