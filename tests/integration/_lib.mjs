@@ -68,6 +68,8 @@ export async function newBusiness(tag) {
   const l = await c.post("/api/auth/login", { email, password: PASSWORD });
   if (l.status !== 200) throw new Error("login failed " + l.status + " " + JSON.stringify(l.data));
   const user = await prisma.user.findUnique({ where: { email } });
+  // New businesses start on INVENTORY_ONLY; these tests need POS, sales and shifts.
+  await prisma.business.update({ where: { id: user.businessId }, data: { appMode: "FULL" } });
   const branches = (await c.get("/api/branches")).data.branches;
   return { c, email, businessId: user.businessId, ownerId: user.id, branch: branches[0], branches };
 }
