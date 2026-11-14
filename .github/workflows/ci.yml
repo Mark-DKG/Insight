@@ -46,8 +46,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm run test:unit
-      - name: Apply migrations to the CI database
-        run: npx prisma migrate deploy
+      - name: Apply migrations to the CI database (numeric order)
+        run: ./scripts/apply-migrations.sh
       - name: Build
         run: npm run build
       - name: Start the app
