@@ -60,24 +60,7 @@ const NAV_ITEMS = [
 
 const CATEGORIES = ["All Categories", "Beverages", "Snacks", "Household", "Personal Care", "Dairy"];
 
-const PRODUCTS = [
-  { id: "P-0001", name: "Sunlight Cooking Oil 2L", sku: "SNL-OIL-2L", barcode: "6001087312456", category: "Household", cost: 24.0, price: 32.0, qty: 6, min: 15, max: 80, supplier: "Kama Distributors", unit: "Bottle" },
-  { id: "P-0002", name: "Malta Guinness 330ml", sku: "MLT-GUI-330", barcode: "6001007512344", category: "Beverages", cost: 4.2, price: 6.5, qty: 142, min: 60, max: 300, supplier: "Accra Beverage Co.", unit: "Can" },
-  { id: "P-0003", name: "Milo 400g Tin", sku: "MLO-400", barcode: "6009880912233", category: "Beverages", cost: 28.5, price: 38.0, qty: 0, min: 10, max: 50, supplier: "Kama Distributors", unit: "Tin" },
-  { id: "P-0004", name: "Indomie Chicken 70g", sku: "INDM-CHK-70", barcode: "6151100022189", category: "Snacks", cost: 2.1, price: 3.5, qty: 480, min: 200, max: 1000, supplier: "West Africa Foods", unit: "Pack" },
-  { id: "P-0005", name: "Fan Milk Yoghurt 500ml", sku: "FML-YOG-500", barcode: "6001234509981", category: "Dairy", cost: 9.0, price: 13.5, qty: 11, min: 20, max: 100, supplier: "Fan Milk Ltd.", unit: "Bottle" },
-  { id: "P-0006", name: "Dettol Soap 100g", sku: "DTL-SOAP-100", barcode: "6001087732211", category: "Personal Care", cost: 5.6, price: 8.0, qty: 3, min: 25, max: 120, supplier: "Kama Distributors", unit: "Bar" },
-  { id: "P-0007", name: "Peace Detergent Powder 1kg", sku: "PCE-DET-1KG", barcode: "6009991123044", category: "Household", cost: 14.0, price: 19.5, qty: 58, min: 20, max: 100, supplier: "West Africa Foods", unit: "Bag" },
-  { id: "P-0008", name: "Coca-Cola 350ml", sku: "CCL-350", barcode: "6001007712398", category: "Beverages", cost: 3.4, price: 5.0, qty: 210, min: 100, max: 500, supplier: "Accra Beverage Co.", unit: "Bottle" },
-];
 
-const MOVEMENTS = [
-  { time: "09:41", product: "Malta Guinness 330ml", type: "Stock Out", qty: -12, ref: "RCT-10482", user: "Ama Owusu" },
-  { time: "08:15", product: "Sunlight Cooking Oil 2L", qty: -2, type: "Stock Out", ref: "RCT-10478", user: "Ama Owusu" },
-  { time: "07:50", product: "Indomie Chicken 70g", type: "Stock In", qty: 240, ref: "PO-2214", user: "Kojo Mensah" },
-  { time: "Yesterday", product: "Milo 400g Tin", type: "Adjustment", qty: -3, ref: "ADJ-0091", user: "System" },
-  { time: "Yesterday", product: "Dettol Soap 100g", type: "Damaged", qty: -4, ref: "DMG-0033", user: "Kojo Mensah" },
-];
 
 const currency = (n) =>
   `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -111,8 +94,12 @@ export default function InsightInventory() {
 
   const loadProducts = React.useCallback(async (branchId) => {
     try {
+      setLoadError("");
       const res = await fetch("/api/products?pageSize=100");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoadError("Products could not be loaded. No stock figures are shown until the data loads.");
+        return;
+      }
       const body = await res.json();
       setLiveProducts(
         body.items.map((p) => ({
@@ -131,7 +118,7 @@ export default function InsightInventory() {
         }))
       );
     } catch {
-      setLoadError("Showing sample data — couldn't reach the server.");
+      setLoadError("Products could not be loaded — couldn't reach the server.");
     }
   }, []);
 
@@ -146,7 +133,7 @@ export default function InsightInventory() {
         setSession(meBody.user);
         loadProducts(meBody.user.branchId);
       } catch {
-        if (!cancelled) setLoadError("Showing sample data — couldn't reach the server.");
+        if (!cancelled) setLoadError("Products could not be loaded — couldn't reach the server.");
       }
     }
     init();
@@ -155,15 +142,18 @@ export default function InsightInventory() {
     };
   }, [loadProducts]);
 
-  const activeProducts = liveProducts ?? PRODUCTS;
+  const activeProducts = liveProducts ?? [];
 
   const [liveMovements, setLiveMovements] = useState(null);
   React.useEffect(() => {
     if (tab !== "movements") return;
     fetch("/api/inventory/movements?limit=50")
       .then((res) => (res.ok ? res.json() : null))
-      .then((body) => body && setLiveMovements(body.movements))
-      .catch(() => {});
+      .then((body) => {
+        if (body) setLiveMovements(body.movements);
+        else setLoadError("Stock movements could not be loaded.");
+      })
+      .catch(() => setLoadError("Stock movements could not be loaded."));
   }, [tab]);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -303,7 +293,7 @@ export default function InsightInventory() {
   };
 
   const movementsToShow = useMemo(() => {
-    if (!liveMovements) return MOVEMENTS; // not yet loaded — sample while waiting
+    if (!liveMovements) return []; // not loaded — never show invented movements
     const TYPE_LABEL = {
       STOCK_IN: "Stock In",
       STOCK_OUT: "Stock Out",
@@ -449,6 +439,15 @@ export default function InsightInventory() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {loadError && (
+            <div role="alert" style={{ background: theme.surface, border: `1px solid ${bad}`, color: bad, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>{loadError}</span>
+              <button type="button" onClick={() => loadProducts(session?.branchId ?? null)} style={{ background: "transparent", border: `1px solid ${bad}`, color: bad, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Retry</button>
+            </div>
+          )}
+          {!liveProducts && !loadError && (
+            <div style={{ color: theme.textMuted, fontSize: 13, marginBottom: 14 }}>Loading products…</div>
+          )}
           {modeNotice && appMode && !hasPos(appMode) && (
             <div role="status" style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 6, fontSize: 13, background: dark ? "#173C26" : "#E7F5EA", color: dark ? "#CFE3D6" : "#145A32", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>That page isn't available in Inventory Only mode, so you've been brought to Inventory. An owner can switch modes in Settings.</span>

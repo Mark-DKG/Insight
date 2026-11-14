@@ -71,32 +71,8 @@ const CATEGORY_ICONS = {
   Other: MoreHorizontal,
 };
 
-const EXPENSES = [
-  { id: "EXP-0142", date: "6 Sep", category: "Rent", description: "September shop rent", amount: 3500.0, method: "Bank Transfer", user: "Owusu Ansah" },
-  { id: "EXP-0141", date: "5 Sep", category: "Utilities", description: "ECG electricity bill", amount: 480.0, method: "Mobile Money", user: "Owusu Ansah" },
-  { id: "EXP-0140", date: "5 Sep", category: "Transport", description: "Delivery van fuel", amount: 220.0, method: "Cash", user: "Kojo Mensah" },
-  { id: "EXP-0139", date: "3 Sep", category: "Salaries", description: "Cashier salaries — August", amount: 4200.0, method: "Bank Transfer", user: "Owusu Ansah" },
-  { id: "EXP-0138", date: "2 Sep", category: "Maintenance", description: "Fridge repair", amount: 350.0, method: "Cash", user: "Ama Owusu" },
-  { id: "EXP-0137", date: "1 Sep", category: "Internet", description: "Monthly internet subscription", amount: 180.0, method: "Card", user: "Owusu Ansah" },
-  { id: "EXP-0136", date: "30 Aug", category: "Marketing", description: "Facebook promotion", amount: 150.0, method: "Card", user: "Owusu Ansah" },
-];
 
-const EXPENSE_BY_CATEGORY = [
-  { name: "Salaries", value: 4200, color: "#145A32" },
-  { name: "Rent", value: 3500, color: "#2E7D32" },
-  { name: "Utilities", value: 480, color: "#4C9A4F" },
-  { name: "Transport", value: 220, color: "#7FB77E" },
-  { name: "Maintenance", value: 350, color: "#A9CBA6" },
-  { name: "Internet", value: 180, color: "#C9DFC7" },
-  { name: "Marketing", value: 150, color: "#E1EEE0" },
-];
 
-const EMPLOYEES = [
-  { id: "E-001", name: "Ama Owusu", role: "Cashier", branch: "Main Branch", status: "On Shift", sales: 12480, shiftStart: "08:00", expectedCash: 4820, actualCash: 4795, variance: -25 },
-  { id: "E-002", name: "Kojo Mensah", role: "Cashier", branch: "Main Branch", status: "On Shift", sales: 9860, shiftStart: "08:00", expectedCash: 3120, actualCash: 3120, variance: 0 },
-  { id: "E-003", name: "Owusu Ansah", role: "Manager", branch: "Main Branch", status: "Active", sales: null, shiftStart: null, expectedCash: null, actualCash: null, variance: null },
-  { id: "E-004", name: "Efua Danso", role: "Cashier", branch: "Tema Branch", status: "Off Shift", sales: 7220, shiftStart: null, expectedCash: null, actualCash: null, variance: null },
-];
 
 const currency = (n) =>
   `GHS ${Math.abs(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -116,6 +92,7 @@ export default function InsightExpensesEmployees() {
 
   const [session, setSession] = useState(null);
   const [liveExpenses, setLiveExpenses] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [liveGrossProfit, setLiveGrossProfit] = useState(null);
   const [liveEmployees, setLiveEmployees] = useState(null);
 
@@ -152,6 +129,8 @@ export default function InsightExpensesEmployees() {
   const loadExpenses = React.useCallback(async () => {
     try {
       const [expRes, profitRes] = await Promise.all([fetch("/api/expenses"), fetch("/api/reports/profit")]);
+      setLoadError("");
+      if (!expRes.ok) setLoadError("Expenses could not be loaded. No figures are shown until the data loads.");
       if (expRes.ok) {
         const body = await expRes.json();
         setLiveExpenses(
@@ -171,7 +150,7 @@ export default function InsightExpensesEmployees() {
         setLiveGrossProfit(body.grossProfit);
       }
     } catch {
-      // Falls back to the static sample data below.
+      setLoadError("Could not reach the server. No expense figures are shown.");
     }
   }, []);
 
@@ -188,7 +167,10 @@ export default function InsightExpensesEmployees() {
   const loadEmployees = React.useCallback(async () => {
     try {
       const res = await fetch("/api/employees");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoadError("Employees could not be loaded.");
+        return;
+      }
       const body = await res.json();
       setLiveEmployees(
         body.employees.map((e) => {
@@ -208,7 +190,7 @@ export default function InsightExpensesEmployees() {
         })
       );
     } catch {
-      // Falls back to the static sample roster below.
+      setLoadError("Could not reach the server. The employee list was not loaded.");
     }
   }, []);
 
@@ -216,7 +198,7 @@ export default function InsightExpensesEmployees() {
     loadEmployees();
   }, [loadEmployees]);
 
-  const employeesToShow = liveEmployees ?? EMPLOYEES;
+  const employeesToShow = liveEmployees ?? [];
 
   async function handleAddEmployee(e) {
     e.preventDefault();
@@ -252,10 +234,10 @@ export default function InsightExpensesEmployees() {
     }
   }
 
-  const expensesToShow = liveExpenses ?? EXPENSES;
+  const expensesToShow = liveExpenses ?? [];
 
   const expenseByCategory = useMemo(() => {
-    if (!liveExpenses) return EXPENSE_BY_CATEGORY;
+    if (!liveExpenses) return [];
     const totals = {};
     for (const e of liveExpenses) {
       totals[e.category] = (totals[e.category] ?? 0) + e.amount;
@@ -348,8 +330,9 @@ export default function InsightExpensesEmployees() {
   }, [query, categoryFilter, expensesToShow]);
 
   const totalExpenses = expensesToShow.reduce((s, e) => s + e.amount, 0);
-  const grossProfit = liveGrossProfit ?? 12470; // illustrative fallback, matches dashboard-scale figures
-  const netProfit = grossProfit - totalExpenses;
+  // No invented figure: when profit is unavailable, show a dash, not a number.
+  const grossProfit = liveGrossProfit ?? null;
+  const netProfit = grossProfit === null || !liveExpenses ? null : grossProfit - totalExpenses;
 
   const statusStyle = (status) => {
     if (status === "On Shift") return { color: primary, bg: dark ? "#173C26" : "#E7F5EA" };
@@ -472,12 +455,21 @@ export default function InsightExpensesEmployees() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {loadError && (
+            <div role="alert" style={{ background: theme.surface, border: `1px solid ${bad}`, color: bad, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>{loadError}</span>
+              <button type="button" onClick={() => { loadExpenses(); loadEmployees(); }} style={{ background: "transparent", border: `1px solid ${bad}`, color: bad, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Retry</button>
+            </div>
+          )}
+          {!liveExpenses && !loadError && (
+            <div style={{ color: theme.textMuted, fontSize: 13, marginBottom: 14 }}>Loading expenses…</div>
+          )}
           {/* Summary tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 18 }}>
             {[
               { label: "Total Expenses (This Period)", value: currency(totalExpenses), color: bad },
-              { label: "Gross Profit", value: currency(grossProfit), color: primary },
-              { label: "Net Profit", value: currency(netProfit), color: netProfit >= 0 ? primary : bad },
+              { label: "Gross Profit", value: grossProfit === null ? "—" : currency(grossProfit), color: primary },
+              { label: "Net Profit", value: netProfit === null ? "—" : currency(netProfit), color: netProfit === null || netProfit >= 0 ? primary : bad },
             ].map((tile) => (
               <div key={tile.label} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, padding: 16 }}>
                 <div style={{ fontSize: 12.5, color: theme.textMuted }}>{tile.label}</div>

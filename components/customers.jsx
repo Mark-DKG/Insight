@@ -53,75 +53,6 @@ const NAV_ITEMS = [
   { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
-const CUSTOMERS = [
-  {
-    id: "C-0001",
-    name: "Linda Boateng",
-    phone: "024 555 0142",
-    email: "linda.boateng@example.com",
-    address: "12 Ring Road, Accra",
-    creditLimit: 1000,
-    creditBalance: 612.0,
-    lastPurchase: "Today, 09:22",
-    history: [
-      { date: "Today, 09:22", type: "Credit Sale", ref: "RCT-10481", amount: 612.0, dueDate: "14 Sep 2026" },
-      { date: "28 Aug", type: "Payment", ref: "PAY-0091", amount: -400.0 },
-      { date: "12 Aug", type: "Credit Sale", ref: "RCT-10312", amount: 400.0, dueDate: "26 Aug 2026" },
-    ],
-  },
-  {
-    id: "C-0002",
-    name: "Kwabena Asante",
-    phone: "020 333 7781",
-    email: "k.asante@example.com",
-    address: "Spintex Road, Accra",
-    creditLimit: 500,
-    creditBalance: 0,
-    lastPurchase: "Today, 08:40",
-    history: [
-      { date: "Today, 08:40", type: "Sale (Card)", ref: "RCT-10479", amount: 298.25 },
-      { date: "15 Aug", type: "Payment", ref: "PAY-0084", amount: -180.0 },
-      { date: "2 Aug", type: "Credit Sale", ref: "RCT-10201", amount: 180.0, dueDate: "16 Aug 2026" },
-    ],
-  },
-  {
-    id: "C-0003",
-    name: "Nana Adjei",
-    phone: "055 214 9902",
-    email: "nana.adjei@example.com",
-    address: "Tema Community 5",
-    creditLimit: 800,
-    creditBalance: 745.5,
-    lastPurchase: "3 Sep",
-    history: [
-      { date: "3 Sep", type: "Credit Sale", ref: "RCT-10390", amount: 745.5, dueDate: "5 Sep 2026" },
-    ],
-  },
-  {
-    id: "C-0004",
-    name: "Efua Sarpong",
-    phone: "027 660 1123",
-    email: "efua.s@example.com",
-    address: "East Legon, Accra",
-    creditLimit: 300,
-    creditBalance: 60.0,
-    lastPurchase: "30 Aug",
-    history: [
-      { date: "30 Aug", type: "Credit Sale", ref: "RCT-10288", amount: 60.0, dueDate: "13 Sep 2026" },
-    ],
-  },
-  {
-    id: "C-0005",
-    name: "Kojo Antwi",
-    phone: "050 887 4420",
-    email: "kojo.antwi@example.com",
-    address: "Kasoa Highway",
-    creditLimit: 200,
-    creditBalance: 0,
-    lastPurchase: "18 Aug",
-    history: [{ date: "18 Aug", type: "Sale (Cash)", ref: "RCT-10190", amount: 84.0 }],
-  },
-];
 
 const currency = (n) =>
   `GHS ${Math.abs(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -148,11 +79,12 @@ export default function InsightCustomers() {
   const appMode = useAppMode(active);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all"); // all | credit | overdue
-  const [selectedId, setSelectedId] = useState(CUSTOMERS[0].id);
+  const [selectedId, setSelectedId] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
 
   const [session, setSession] = useState(null);
   const [liveCustomers, setLiveCustomers] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [statementsById, setStatementsById] = useState({});
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -164,8 +96,12 @@ export default function InsightCustomers() {
 
   const loadCustomers = React.useCallback(async () => {
     try {
+      setLoadError("");
       const res = await fetch("/api/customers");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoadError("Customers could not be loaded. No figures are shown until the data loads.");
+        return;
+      }
       const body = await res.json();
       setLiveCustomers(body.customers);
 
@@ -182,7 +118,7 @@ export default function InsightCustomers() {
       );
       setStatementsById(Object.fromEntries(entries));
     } catch {
-      // Falls back to the static sample list below.
+      setLoadError("Customers could not be loaded. Check your connection and retry.");
     }
   }, []);
 
@@ -199,7 +135,7 @@ export default function InsightCustomers() {
   // payments, and cash/card sales) so the rest of this screen — built
   // against the sample shape — doesn't need to change.
   const customersToShow = useMemo(() => {
-    if (!liveCustomers) return CUSTOMERS; // not yet loaded — show sample while waiting
+    if (!liveCustomers) return []; // not loaded (or failed) — never show invented customers
     if (liveCustomers.length === 0) return []; // genuinely no customers yet — show real empty state
 
     return liveCustomers.map((c) => {
@@ -324,7 +260,7 @@ export default function InsightCustomers() {
       return;
     }
     if (!liveCustomers) {
-      setPaymentError("Payments can't be recorded on sample data — try again once live data has loaded.");
+      setPaymentError("Customer data has not loaded yet — try again once it has.");
       return;
     }
 
@@ -509,6 +445,15 @@ export default function InsightCustomers() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
+          {loadError && (
+            <div role="alert" style={{ background: theme.surface, border: `1px solid ${bad}`, color: bad, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>{loadError}</span>
+              <button type="button" onClick={loadCustomers} style={{ background: "transparent", border: `1px solid ${bad}`, color: bad, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Retry</button>
+            </div>
+          )}
+          {!liveCustomers && !loadError && (
+            <div style={{ color: theme.textMuted, fontSize: 13, marginBottom: 14 }}>Loading customers…</div>
+          )}
           {/* Summary tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 18 }}>
             {[

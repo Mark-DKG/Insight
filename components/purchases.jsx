@@ -54,62 +54,7 @@ const NAV_ITEMS = [
   { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
-const PURCHASES = [
-  { id: "PO-2214", supplier: "West Africa Foods", status: "Received", ordered: "5 Sep", expected: "6 Sep", total: 3360.0, items: 2 },
-  { id: "PO-2213", supplier: "Kama Distributors", status: "Partially Received", ordered: "3 Sep", expected: "7 Sep", total: 5280.0, items: 4 },
-  { id: "PO-2212", supplier: "Accra Beverage Co.", status: "Ordered", ordered: "2 Sep", expected: "9 Sep", total: 2140.0, items: 3 },
-  { id: "PO-2211", supplier: "Fan Milk Ltd.", status: "Received", ordered: "28 Aug", expected: "30 Aug", total: 990.0, items: 1 },
-  { id: "PO-2210", supplier: "Kama Distributors", status: "Draft", ordered: "—", expected: "—", total: 1450.0, items: 2 },
-];
 
-const SUPPLIERS = [
-  {
-    id: "S-001",
-    name: "Kama Distributors",
-    phone: "030 220 1145",
-    email: "orders@kamadist.com",
-    address: "Tema Industrial Area",
-    balance: 5280.0,
-    reliability: "High",
-    products: [
-      { name: "Sunlight Cooking Oil 2L", price: 24.0, competitor: "Elsewhere Ltd.", competitorPrice: 24.0 },
-      { name: "Dettol Soap 100g", price: 5.6, competitor: "West Africa Foods", competitorPrice: 5.9 },
-    ],
-  },
-  {
-    id: "S-002",
-    name: "West Africa Foods",
-    phone: "024 771 9034",
-    email: "sales@waf.com.gh",
-    address: "Spintex, Accra",
-    balance: 0,
-    reliability: "High",
-    products: [
-      { name: "Indomie Chicken 70g", price: 2.1, competitor: "Kama Distributors", competitorPrice: 2.25 },
-      { name: "Peace Detergent Powder 1kg", price: 14.0, competitor: "Kama Distributors", competitorPrice: 13.4 },
-    ],
-  },
-  {
-    id: "S-003",
-    name: "Accra Beverage Co.",
-    phone: "020 118 4402",
-    email: "info@accrabev.com",
-    address: "Achimota, Accra",
-    balance: 2140.0,
-    reliability: "Medium",
-    products: [{ name: "Malta Guinness 330ml", price: 4.2, competitor: null, competitorPrice: null }],
-  },
-  {
-    id: "S-004",
-    name: "Fan Milk Ltd.",
-    phone: "030 277 6612",
-    email: "orders@fanmilk.com",
-    address: "Kaneshie, Accra",
-    balance: 0,
-    reliability: "High",
-    products: [{ name: "Fan Milk Yoghurt 500ml", price: 9.0, competitor: null, competitorPrice: null }],
-  },
-];
 
 const currency = (n) =>
   `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -125,10 +70,11 @@ export default function InsightPurchases() {
     if (new URLSearchParams(window.location.search).get("tab") === "suppliers") setTab("suppliers");
   }, []);
   const [query, setQuery] = useState("");
-  const [selectedSupplierId, setSelectedSupplierId] = useState(SUPPLIERS[0].id);
+  const [selectedSupplierId, setSelectedSupplierId] = useState(null);
 
   const [session, setSession] = useState(null);
   const [liveSuppliers, setLiveSuppliers] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [livePurchases, setLivePurchases] = useState(null);
   const [liveProducts, setLiveProducts] = useState(null);
   const [supplierDetail, setSupplierDetail] = useState(null); // { supplier, priceComparison } for the selected one
@@ -152,12 +98,15 @@ export default function InsightPurchases() {
         fetch("/api/products?pageSize=100"),
         fetch("/api/auth/me"),
       ]);
+      setLoadError("");
       if (suppliersRes.ok) setLiveSuppliers((await suppliersRes.json()).suppliers);
+      else setLoadError("Suppliers could not be loaded.");
       if (purchasesRes.ok) setLivePurchases((await purchasesRes.json()).purchases);
+      else setLoadError("Purchase orders could not be loaded.");
       if (productsRes.ok) setLiveProducts((await productsRes.json()).items);
       if (meRes.ok) setSession((await meRes.json()).user);
     } catch {
-      // Falls back to the static sample data below.
+      setLoadError("Could not reach the server. No supplier or purchase figures are shown.");
     }
   }, []);
 
@@ -223,7 +172,7 @@ export default function InsightPurchases() {
   };
 
   const purchasesToShow = useMemo(() => {
-    if (!livePurchases) return PURCHASES;
+    if (!livePurchases) return [];
     return livePurchases.map((p) => ({
       id: p.id.slice(0, 8),
       fullId: p.id,
@@ -237,7 +186,7 @@ export default function InsightPurchases() {
   }, [livePurchases]);
 
   const suppliersToShow = useMemo(() => {
-    if (!liveSuppliers) return SUPPLIERS; // not yet loaded — show sample while waiting
+    if (!liveSuppliers) return []; // not loaded — never show invented suppliers
     if (liveSuppliers.length === 0) return []; // genuinely no suppliers yet
     return liveSuppliers.map((s) => ({
       id: s.id,
@@ -556,6 +505,15 @@ export default function InsightPurchases() {
         </header>
 
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
+          {loadError && (
+            <div role="alert" style={{ background: theme.surface, border: `1px solid ${bad}`, color: bad, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>{loadError}</span>
+              <button type="button" onClick={loadAll} style={{ background: "transparent", border: `1px solid ${bad}`, color: bad, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Retry</button>
+            </div>
+          )}
+          {!liveSuppliers && !loadError && (
+            <div style={{ color: theme.textMuted, fontSize: 13, marginBottom: 14 }}>Loading suppliers…</div>
+          )}
           {/* Summary tiles */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 18 }}>
             {[

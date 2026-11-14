@@ -66,61 +66,6 @@ const NAV_ITEMS = [
   { key: "logout", label: "Log out", icon: LogOutIcon },
 ];
 
-const DATE_RANGES = ["Today", "This Week", "This Month", "Custom Range"];
-
-const SALES_TREND = [
-  { day: "Mon", sales: 4820 }, { day: "Tue", sales: 5120 }, { day: "Wed", sales: 4390 },
-  { day: "Thu", sales: 6010 }, { day: "Fri", sales: 7240 }, { day: "Sat", sales: 8460 }, { day: "Sun", sales: 5680 },
-];
-
-const SALES_BY_CATEGORY = [
-  { category: "Beverages", amount: 14820, share: 34 },
-  { category: "Snacks", amount: 8940, share: 20 },
-  { category: "Household", amount: 7320, share: 17 },
-  { category: "Personal Care", amount: 6110, share: 14 },
-  { category: "Dairy", amount: 6510, share: 15 },
-];
-
-const SALES_BY_EMPLOYEE = [
-  { name: "Ama Owusu", sales: 18240, transactions: 142 },
-  { name: "Kojo Mensah", sales: 15680, transactions: 118 },
-  { name: "Efua Danso", sales: 9260, transactions: 74 },
-];
-
-const SALES_BY_PAYMENT = [
-  { method: "Cash", amount: 16200 },
-  { method: "Mobile Money", amount: 14380 },
-  { method: "Card", amount: 6420 },
-  { method: "Credit", amount: 4980 },
-  { method: "Bank Transfer", amount: 1200 },
-];
-
-const PROFIT_TREND = [
-  { day: "Mon", gross: 1540, net: 980 }, { day: "Tue", gross: 1690, net: 1080 },
-  { day: "Wed", gross: 1310, net: 820 }, { day: "Thu", gross: 2040, net: 1360 },
-  { day: "Fri", gross: 2510, net: 1740 }, { day: "Sat", gross: 2980, net: 2120 },
-  { day: "Sun", gross: 1870, net: 1240 },
-];
-
-const PRODUCT_PROFITABILITY = [
-  { name: "Coca-Cola 350ml", revenue: 4820, cost: 3278, profit: 1542, margin: 32 },
-  { name: "Malta Guinness 330ml", revenue: 6110, cost: 3945, profit: 2165, margin: 35 },
-  { name: "Indomie Chicken 70g", revenue: 3360, cost: 2016, profit: 1344, margin: 40 },
-  { name: "Sunlight Cooking Oil 2L", revenue: 2880, cost: 2160, profit: 720, margin: 25 },
-  { name: "Milo 400g Tin", revenue: 0, cost: 0, profit: 0, margin: 0 },
-];
-
-const STOCK_MOVEMENT = [
-  { day: "Mon", in: 320, out: 210 }, { day: "Tue", in: 0, out: 245 }, { day: "Wed", in: 480, out: 198 },
-  { day: "Thu", in: 0, out: 302 }, { day: "Fri", in: 150, out: 356 }, { day: "Sat", in: 0, out: 412 }, { day: "Sun", in: 0, out: 240 },
-];
-
-const DISCREPANCIES = [
-  { product: "Malta Guinness 330ml", expected: 154, actual: 142, variance: -12, employee: "Ama Owusu", date: "5 Sep", impact: 78.0 },
-  { product: "Dettol Soap 100g", expected: 8, actual: 3, variance: -5, employee: "Kojo Mensah", date: "3 Sep", impact: 28.0 },
-  { product: "Milo 400g Tin", expected: 4, actual: 0, variance: -4, employee: "Ama Owusu", date: "1 Sep", impact: 114.0 },
-];
-
 const currency = (n) =>
   `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -134,7 +79,6 @@ export default function InsightReports() {
     if (appMode && !hasPos(appMode)) setReportTab("inventory");
   }, [appMode]);
   const [reportTab, setReportTab] = useState("sales"); // sales | profit | inventory
-  const [range, setRange] = useState("This Week");
 
   const [session, setSession] = useState(null);
   const [liveSales, setLiveSales] = useState(null);
@@ -142,10 +86,15 @@ export default function InsightReports() {
   const [liveProfit, setLiveProfit] = useState(null);
   const [liveExpensesTotal, setLiveExpensesTotal] = useState(null);
   const [liveProducts, setLiveProducts] = useState(null);
+  // Live data only: loading | ok | error. No sample figures are ever shown.
+  const [loadState, setLoadState] = useState("loading");
+  const [reloadKey, setReloadKey] = useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
+      setLoadState("loading");
+      let failed = false;
       try {
         const [salesRes, profitRes, expensesRes, productsRes, meRes, movementsRes] = await Promise.all([
           fetch("/api/sales?limit=200"),
@@ -155,6 +104,8 @@ export default function InsightReports() {
           fetch("/api/auth/me"),
           fetch("/api/inventory/movements?limit=200"),
         ]);
+        // 403 = this section isn't part of the person's package/permissions.
+        if (!cancelled && [salesRes, profitRes, expensesRes, productsRes, movementsRes].some((r) => !r.ok && r.status !== 403)) failed = true;
         if (!cancelled && salesRes.ok) setLiveSales((await salesRes.json()).sales);
         if (!cancelled && profitRes.ok) setLiveProfit(await profitRes.json());
         if (!cancelled && expensesRes.ok) setLiveExpensesTotal((await expensesRes.json()).total);
@@ -162,14 +113,20 @@ export default function InsightReports() {
         if (!cancelled && meRes.ok) setSession((await meRes.json()).user);
         if (!cancelled && movementsRes.ok) setLiveMovements((await movementsRes.json()).movements);
       } catch {
-        // Falls back to the static sample data throughout this screen.
+        failed = true;
       }
+      if (!cancelled) setLoadState(failed ? "error" : "ok");
     }
     load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
+
+  const unavailable = loadState === "error" ? "Unavailable" : "…";
+  const showMoney = (v) => (v === null || v === undefined ? unavailable : currency(Number(v)));
+  const showCount = (v) => (v === null || v === undefined ? unavailable : String(v));
+  const CAP = 100; // the server returns at most 100 sales / 100 products per request
 
   const theme = useMemo(
     () =>
@@ -279,36 +236,87 @@ export default function InsightReports() {
     return salesTrendLive.map((d) => ({ day: d.day, gross: d.gross, net: d.gross - dailyExpense }));
   }, [salesTrendLive, liveExpensesTotal]);
 
-  const totalSales = liveProfit?.revenue ?? SALES_TREND.reduce((s, d) => s + d.sales, 0);
-  const totalGross = liveProfit?.grossProfit ?? PROFIT_TREND.reduce((s, d) => s + d.gross, 0);
-  const totalNet = liveProfit?.netProfit ?? PROFIT_TREND.reduce((s, d) => s + d.net, 0);
-  const transactionCount = liveProfit?.transactionCount ?? 334;
-  const margin = liveProfit ? liveProfit.netMarginPercent.toFixed(1) : ((totalNet / totalSales) * 100).toFixed(1);
+  const totalSales = liveProfit ? Number(liveProfit.revenue) : null;
+  const totalGross = liveProfit ? Number(liveProfit.grossProfit) : null;
+  const totalNet = liveProfit ? Number(liveProfit.netProfit) : null;
+  const transactionCount = liveProfit ? Number(liveProfit.transactionCount) : null;
+  const margin = liveProfit ? Number(liveProfit.netMarginPercent).toFixed(1) : null;
 
-  const ExportBar = () => (
-    <div style={{ display: "flex", gap: 8 }}>
-      {[
-        { label: "Print", icon: Printer },
-        { label: "Export PDF", icon: FileDown },
-        { label: "Export CSV", icon: FileSpreadsheet },
-      ].map((btn) => {
-        const Icon = btn.icon;
-        return (
-          <button
-            key={btn.label}
-            style={{
-              display: "flex", alignItems: "center", gap: 6, border: `1px solid ${theme.border}`,
-              borderRadius: 6, padding: "7px 12px", fontSize: 12.5, background: "transparent",
-              color: theme.text, cursor: "pointer", fontWeight: 600,
-            }}
-          >
-            <Icon size={13} />
-            {btn.label}
-          </button>
-        );
-      })}
-    </div>
-  );
+  // ---- Exports (built in the browser from the same data shown on screen;
+  // that data is already limited by the server to this business and the
+  // person's permissions). A report with nothing loaded cannot be exported.
+  const csvCell = (v) => {
+    let t = v === null || v === undefined ? "" : String(v);
+    if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // stop spreadsheet formula injection
+    return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const downloadCsv = (filename, header, rows) => {
+    const text = [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF" + text], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+  const stamp = new Date().toISOString().slice(0, 10);
+  const csvForTab = () => {
+    if (reportTab === "sales" && liveSales) {
+      const capped = liveSales.length >= CAP ? "-latest-100" : "";
+      return {
+        filename: `insight-sales${capped}-${stamp}.csv`,
+        header: ["Receipt", "Date", "Cashier", "Customer", "Payment method", "Status", "Total", "Gross profit"],
+        rows: liveSales.map((x) => [x.receiptNumber, new Date(x.createdAt).toISOString(), x.cashier?.name ?? "", x.customer?.name ?? "", x.paymentMethod, x.status, x.totalAmount, x.grossProfit]),
+      };
+    }
+    if (reportTab === "profit" && liveProfit) {
+      return {
+        filename: `insight-profit-summary-${stamp}.csv`,
+        header: ["Measure", "Value"],
+        rows: [["Revenue", liveProfit.revenue], ["Gross profit", liveProfit.grossProfit], ["Expenses", liveProfit.expenses ?? liveExpensesTotal ?? ""], ["Net profit", liveProfit.netProfit], ["Completed sales", liveProfit.transactionCount]],
+      };
+    }
+    if (reportTab === "inventory" && liveProducts) {
+      const capped = liveProducts.length >= CAP ? "-first-100" : "";
+      return {
+        filename: `insight-stock${capped}-${stamp}.csv`,
+        header: ["Product", "SKU", "Units in stock", "Cost price", "Stock value (cost)", "Minimum stock level"],
+        rows: liveProducts.map((pr) => {
+          const qty = pr.inventoryLevels?.reduce((t, l) => t + l.quantity, 0) ?? 0;
+          return [pr.name, pr.sku, qty, pr.costPrice, (Number(pr.costPrice) * qty).toFixed(2), pr.minStockLevel];
+        }),
+      };
+    }
+    return null;
+  };
+  const ExportBar = () => {
+    const csv = csvForTab();
+    const btn = (disabled) => ({
+      display: "flex", alignItems: "center", gap: 6, border: `1px solid ${theme.border}`,
+      borderRadius: 6, padding: "7px 12px", fontSize: 12.5, background: "transparent",
+      color: theme.text, cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, opacity: disabled ? 0.5 : 1,
+    });
+    return (
+      <div style={{ display: "flex", gap: 8 }}>
+        <button style={btn(false)} onClick={() => window.print()} title="Print this report, or choose 'Save as PDF' in the print dialog">
+          <Printer size={13} />
+          Print / Save as PDF
+        </button>
+        <button
+          style={btn(!csv)}
+          disabled={!csv}
+          onClick={() => csv && downloadCsv(csv.filename, csv.header, csv.rows)}
+          title={csv ? "Download what this tab shows as a CSV file" : "Nothing to export: this report's data hasn't loaded"}
+        >
+          <FileSpreadsheet size={13} />
+          Export CSV
+        </button>
+      </div>
+    );
+  };
 
   const Card = ({ children, style }) => (
     <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, padding: 18, ...style }}>
@@ -400,22 +408,22 @@ export default function InsightReports() {
         <main style={{ padding: 24, overflowY: "auto", flex: 1 }}>
           {/* Controls row */}
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {DATE_RANGES.map((r) => (
+            {/* The date-range buttons were removed: they never changed any figure.
+                Totals cover all recorded sales; trends cover the last 7 days. */}
+            <div style={{ fontSize: 12.5, color: loadState === "error" ? bad : theme.textMuted, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {loadState === "error"
+                ? "Some report data couldn't be loaded. Figures marked Unavailable are not estimated."
+                : loadState === "loading"
+                ? "Loading report data…"
+                : "Totals cover all recorded sales. Trends show the last 7 days."}
+              {loadState === "error" && (
                 <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 6,
-                    border: `1px solid ${range === r ? primary : theme.border}`,
-                    background: range === r ? primary : "transparent",
-                    color: range === r ? "#fff" : theme.text, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                  }}
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  style={{ fontSize: 12, fontWeight: 600, color: primary, background: "transparent", border: `1px solid ${primary}`, borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}
                 >
-                  {r === "Custom Range" && <Calendar size={13} />}
-                  {r}
+                  Retry
                 </button>
-              ))}
+              )}
             </div>
             <ExportBar />
           </div>
@@ -445,17 +453,17 @@ export default function InsightReports() {
           {reportTab === "sales" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
-                <Kpi label="Total Sales" value={currency(totalSales)} color={primary} />
-                <Kpi label="Transactions" value={String(transactionCount)} />
-                <Kpi label="Avg. Transaction Value" value={currency(transactionCount ? totalSales / transactionCount : 0)} />
+                <Kpi label="Total Sales" value={showMoney(totalSales)} color={primary} />
+                <Kpi label="Transactions" value={showCount(transactionCount)} />
+                <Kpi label="Avg. Transaction Value" value={totalSales === null || transactionCount === null ? unavailable : currency(transactionCount ? totalSales / transactionCount : 0)} />
                 <Kpi label="Top Category" value="—" />
               </div>
 
               <Card>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Sales Trend — {range}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Sales Trend</div>
                 <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8 }}>Actual</div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={salesTrendLive ?? SALES_TREND} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
+                  <AreaChart data={salesTrendLive ?? []} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
                     <defs>
                       <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={primary} stopOpacity={0.28} />
@@ -474,26 +482,14 @@ export default function InsightReports() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <Card>
                   <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Sales by Category</div>
-                  {liveSales ? (
-                    <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
-                      Not available yet — needs a per-item sales breakdown the app doesn't aggregate in bulk.
-                    </div>
-                  ) : (
-                    <TableShell headers={["Category", "Amount", "Share"]}>
-                      {SALES_BY_CATEGORY.map((c) => (
-                        <tr key={c.category}>
-                          <td style={td}>{c.category}</td>
-                          <td style={{ ...td, fontWeight: 600 }}>{currency(c.amount)}</td>
-                          <td style={{ ...td, color: theme.textMuted }}>{c.share}%</td>
-                        </tr>
-                      ))}
-                    </TableShell>
-                  )}
+                  <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
+                    Not available yet — needs a per-item sales breakdown the app doesn't aggregate in bulk.
+                  </div>
                 </Card>
                 <Card>
                   <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Sales by Employee</div>
                   <TableShell headers={["Employee", "Sales", "Transactions"]}>
-                    {(salesByEmployeeLive ?? SALES_BY_EMPLOYEE).map((e) => (
+                    {(salesByEmployeeLive ?? []).map((e) => (
                       <tr key={e.name}>
                         <td style={td}>{e.name}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{currency(e.sales)}</td>
@@ -507,11 +503,11 @@ export default function InsightReports() {
               <Card>
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Sales by Payment Method</div>
                 <TableShell headers={["Method", "Amount", "Share"]}>
-                  {(salesByPaymentLive ?? SALES_BY_PAYMENT).map((p) => (
+                  {(salesByPaymentLive ?? []).map((p) => (
                     <tr key={p.method}>
                       <td style={td}>{p.method}</td>
                       <td style={{ ...td, fontWeight: 600 }}>{currency(p.amount)}</td>
-                      <td style={{ ...td, color: theme.textMuted }}>{((p.amount / totalSales) * 100).toFixed(0)}%</td>
+                      <td style={{ ...td, color: theme.textMuted }}>{totalSales ? ((p.amount / totalSales) * 100).toFixed(0) + "%" : "—"}</td>
                     </tr>
                   ))}
                 </TableShell>
@@ -523,19 +519,19 @@ export default function InsightReports() {
           {reportTab === "profit" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
-                <Kpi label="Gross Profit" value={currency(totalGross)} color={primary} />
-                <Kpi label="Net Profit" value={currency(totalNet)} color={primary} />
-                <Kpi label="Profit Margin" value={`${margin}%`} />
+                <Kpi label="Gross Profit" value={showMoney(totalGross)} color={primary} />
+                <Kpi label="Net Profit" value={showMoney(totalNet)} color={primary} />
+                <Kpi label="Profit Margin" value={margin === null ? unavailable : `${margin}%`} />
                 <Kpi label="Best Day" value="Saturday" />
               </div>
 
               <Card>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Profit Trend — {range}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Profit Trend</div>
                 <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8 }}>
                   {profitTrendLive ? "Gross profit is exact per day; net profit spreads total expenses evenly across the period." : "Actual"}
                 </div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={profitTrendLive ?? PROFIT_TREND} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
+                  <AreaChart data={profitTrendLive ?? []} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
                     <defs>
                       <linearGradient id="grossFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={deep} stopOpacity={0.28} />
@@ -559,31 +555,9 @@ export default function InsightReports() {
 
               <Card>
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Product Profitability</div>
-                {liveSales ? (
-                  <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
-                    Not available yet — needs a per-item sales breakdown the app doesn't aggregate in bulk.
-                  </div>
-                ) : (
-                <TableShell headers={["Product", "Revenue", "Cost", "Profit", "Margin"]}>
-                  {PRODUCT_PROFITABILITY.map((p) => (
-                    <tr key={p.name}>
-                      <td style={td}>{p.name}</td>
-                      <td style={{ ...td, color: theme.textMuted }}>{currency(p.revenue)}</td>
-                      <td style={{ ...td, color: theme.textMuted }}>{currency(p.cost)}</td>
-                      <td style={{ ...td, fontWeight: 700, color: p.profit > 0 ? primary : theme.textMuted }}>{currency(p.profit)}</td>
-                      <td style={td}>
-                        {p.revenue > 0 ? (
-                          <span style={{ color: p.margin >= 30 ? primary : p.margin >= 15 ? warn : bad, fontWeight: 600 }}>{p.margin}%</span>
-                        ) : (
-                          <span style={{ color: theme.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-                            <TrendingDown size={12} /> No sales this period
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </TableShell>
-                )}
+                <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
+                  Not available yet — needs a per-item sales breakdown the app doesn't aggregate in bulk.
+                </div>
               </Card>
             </div>
           )}
@@ -592,17 +566,17 @@ export default function InsightReports() {
           {reportTab === "inventory" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
-                <Kpi label="Inventory Value" value={currency(inventorySummaryLive?.value ?? 184320)} />
-                <Kpi label="Low Stock Items" value={String(inventorySummaryLive?.low ?? 23)} color={warn} />
-                <Kpi label="Out of Stock" value={String(inventorySummaryLive?.out ?? 6)} color={bad} />
+                <Kpi label="Inventory Value" value={showMoney(inventorySummaryLive?.value)} />
+                <Kpi label="Low Stock Items" value={showCount(inventorySummaryLive?.low)} color={warn} />
+                <Kpi label="Out of Stock" value={showCount(inventorySummaryLive?.out)} color={bad} />
                 <Kpi label="Dead Stock Value" value="—" color={theme.textMuted} />
               </div>
 
               <Card>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Stock Movement — {range}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Stock Movement</div>
                 <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8 }}>Units in vs. units out</div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={stockMovementLive ?? STOCK_MOVEMENT} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
+                  <BarChart data={stockMovementLive ?? []} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.border} vertical={false} />
                     <XAxis dataKey="day" tick={{ fontSize: 12, fill: theme.textMuted }} axisLine={{ stroke: theme.border }} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: theme.textMuted }} axisLine={false} tickLine={false} width={40} />
@@ -619,25 +593,9 @@ export default function InsightReports() {
                   <AlertTriangle size={15} color={bad} />
                   <div style={{ fontSize: 14, fontWeight: 700 }}>Stock Discrepancies</div>
                 </div>
-                {liveMovements ? (
-                  <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
-                    No stock count feature is set up yet — discrepancies are detected by comparing a physical count against expected stock, which the app doesn't yet support.
-                  </div>
-                ) : (
-                <TableShell headers={["Product", "Expected", "Actual", "Variance", "Employee", "Date", "Est. Impact"]}>
-                  {DISCREPANCIES.map((d, i) => (
-                    <tr key={i}>
-                      <td style={{ ...td, fontWeight: 600 }}>{d.product}</td>
-                      <td style={td}>{d.expected}</td>
-                      <td style={td}>{d.actual}</td>
-                      <td style={{ ...td, color: bad, fontWeight: 700 }}>{d.variance}</td>
-                      <td style={{ ...td, color: theme.textMuted }}>{d.employee}</td>
-                      <td style={{ ...td, color: theme.textMuted }}>{d.date}</td>
-                      <td style={{ ...td, color: bad, fontWeight: 600 }}>{currency(d.impact)}</td>
-                    </tr>
-                  ))}
-                </TableShell>
-                )}
+                <div style={{ padding: "24px 12px", textAlign: "center", color: theme.textMuted, fontSize: 12.5 }}>
+                  No stock count feature is set up yet — discrepancies are detected by comparing a physical count against expected stock, which the app doesn't yet support.
+                </div>
               </Card>
             </div>
           )}

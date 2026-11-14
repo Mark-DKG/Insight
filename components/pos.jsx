@@ -63,7 +63,6 @@ const NAV_ITEMS = [
 const CATEGORIES = ["All", "Beverages", "Snacks", "Household", "Personal Care", "Dairy"];
 
 
-const CUSTOMERS = ["Walk-in", "Linda Boateng", "Kwabena Asante", "Nana Adjei", "Efua Sarpong"];
 
 const PAYMENT_METHODS = [
   { key: "cash", label: "Cash", icon: Banknote },

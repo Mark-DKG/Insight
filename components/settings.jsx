@@ -68,12 +68,6 @@ const SETTINGS_SECTIONS = [
   { key: "sync", label: "Synchronization", icon: RefreshCw },
 ];
 
-const USERS = [
-  { id: "U-001", name: "Owusu Ansah", email: "owusu@riversidemart.com", role: "Owner", status: "Active" },
-  { id: "U-002", name: "Ama Owusu", email: "ama.owusu@riversidemart.com", role: "Cashier", status: "Active" },
-  { id: "U-003", name: "Kojo Mensah", email: "kojo.mensah@riversidemart.com", role: "Cashier", status: "Active" },
-  { id: "U-004", name: "Efua Danso", email: "efua.danso@riversidemart.com", role: "Manager", status: "Suspended" },
-];
 
 const DEVICES = [
   { id: "D-001", name: "Main Counter (Windows)", icon: Laptop, lastSync: "2 minutes ago", status: "Online" },
@@ -165,7 +159,7 @@ export default function InsightSettings() {
       .catch(() => {});
   }, [loadUsers]);
 
-  const usersToShow = liveUsers ?? USERS;
+  const usersToShow = liveUsers ?? [];
 
   async function saveBusiness() {
     setSaving(true);
