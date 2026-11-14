@@ -13,10 +13,17 @@ export async function getSession(): Promise<SessionClaims | null> {
   if (!token) return null;
   const claims = await verifyAccessToken(token);
   if (!claims) return null;
-  // Checked on every request (not stored in the token) so approval and the
-  // initial lock take effect immediately.
-  const b = await prisma.business.findUnique({ where: { id: claims.businessId }, select: { awaitingApproval: true } });
-  return b?.awaitingApproval ? { ...claims, locked: true } : claims;
+  // Checked on every request (not trusted from the token) so approval, the
+  // initial lock, suspension and role/branch changes take effect immediately:
+  // a deactivated employee is refused straight away even though their access
+  // token has not expired, and a demoted employee loses rights at once.
+  const user = await prisma.user.findUnique({
+    where: { id: claims.sub },
+    select: { isActive: true, role: true, branchId: true, businessId: true, business: { select: { awaitingApproval: true } } },
+  });
+  if (!user || !user.isActive || user.businessId !== claims.businessId) return null;
+  const fresh = { ...claims, role: user.role, branchId: user.branchId };
+  return user.business.awaitingApproval ? { ...fresh, locked: true } : fresh;
 }
 
 /**

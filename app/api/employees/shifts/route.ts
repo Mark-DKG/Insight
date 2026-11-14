@@ -8,14 +8,16 @@ import { moduleGate } from "@/lib/features";
 // GET /api/employees/shifts?userId=&branchId=&active=true
 export async function GET(request: Request) {
   const session = await getSession();
-  if (!requirePermission(session, "employees:read")) {
+  const seesAll = requirePermission(session, "employees:read");
+  if (!seesAll && !requirePermission(session, "shifts:own")) {
     return NextResponse.json({ error: "You don't have access to view shifts." }, { status: 403 });
   }
   const blocked = await moduleGate(session, "shifts");
   if (blocked) return blocked;
 
   const url = new URL(request.url);
-  const userId = url.searchParams.get("userId") ?? undefined;
+  // Without employees:read (cashiers) only your own shifts are visible.
+  const userId = seesAll ? (url.searchParams.get("userId") ?? undefined) : session!.sub;
   const activeOnly = url.searchParams.get("active") === "true";
 
   const shifts = await prisma.employeeShift.findMany({
@@ -40,7 +42,7 @@ const StartShiftSchema = z.object({
 
 export async function POST(request: Request) {
   const session = await getSession();
-  if (!requirePermission(session, "employees:read")) {
+  if (!requirePermission(session, "shifts:own")) {
     return NextResponse.json({ error: "You don't have permission to start a shift." }, { status: 403 });
   }
   const blocked = await moduleGate(session, "shifts");
@@ -55,8 +57,21 @@ export async function POST(request: Request) {
   const targetUserId = parsed.data.userId ?? session.sub;
 
   // Only an owner/manager may open a shift for someone other than themself.
-  if (targetUserId !== session.sub && !requirePermission(session, "employees:write")) {
+  if (targetUserId !== session.sub && !requirePermission(session, "employees:manage")) {
     return NextResponse.json({ error: "You can only start your own shift." }, { status: 403 });
+  }
+
+  // The target must be an active employee of THIS business, and the branch
+  // must belong to it too.
+  const [target, branch] = await Promise.all([
+    prisma.user.findFirst({ where: { id: targetUserId, businessId: session.businessId, isActive: true }, select: { id: true } }),
+    prisma.branch.findFirst({ where: { id: parsed.data.branchId, businessId: session.businessId }, select: { id: true } }),
+  ]);
+  if (!target) return NextResponse.json({ error: "Employee not found." }, { status: 404 });
+  if (!branch) return NextResponse.json({ error: "Branch not found." }, { status: 404 });
+  // A cashier works in their assigned branch.
+  if (session.role === "CASHIER" && session.branchId && parsed.data.branchId !== session.branchId) {
+    return NextResponse.json({ error: "You can only start a shift in your own branch." }, { status: 403 });
   }
 
   const alreadyOpen = await prisma.employeeShift.findFirst({

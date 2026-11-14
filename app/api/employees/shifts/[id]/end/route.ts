@@ -20,7 +20,7 @@ const EndShiftSchema = z.object({
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
-  if (!requirePermission(session, "employees:read")) {
+  if (!requirePermission(session, "shifts:own")) {
     return NextResponse.json({ error: "You don't have access to shifts." }, { status: 403 });
   }
   const blocked = await moduleGate(session, "shifts");
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   // A cashier can close their own shift; closing someone else's requires
   // the broader employees:write permission (manager/owner).
-  if (shift.userId !== session.sub && !requirePermission(session, "employees:write")) {
+  if (shift.userId !== session.sub && !requirePermission(session, "employees:manage")) {
     return NextResponse.json({ error: "You can only close your own shift." }, { status: 403 });
   }
 

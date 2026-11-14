@@ -29,6 +29,10 @@ export type Permission =
   | "expenses:write"
   | "employees:read"
   | "employees:write"
+  // Manage cashiers (edit, move branch, suspend/reactivate). Owner and Manager.
+  | "employees:manage"
+  // Open and close your OWN shift (least privilege for cashiers).
+  | "shifts:own"
   | "reports:read"
   | "settings:read"
   | "settings:write"
@@ -49,7 +53,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "suppliers:read", "suppliers:write",
     "purchases:read", "purchases:write",
     "expenses:read", "expenses:write",
-    "employees:read", "employees:write",
+    "employees:read", "employees:write", "employees:manage", "shifts:own",
     "reports:read",
     "settings:read", "settings:write",
     "branches:write",
@@ -64,7 +68,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "suppliers:read", "suppliers:write",
     "purchases:read", "purchases:write",
     "expenses:read", "expenses:write",
-    "employees:read",
+    "employees:read", "employees:manage", "shifts:own",
     "reports:read",
     "settings:read",
     "store:read", "store:manage",
@@ -75,6 +79,7 @@ const ROLE_PERMISSIONS: Record<SessionClaims["role"], Permission[]> = {
     "sales:create",
     "sales:read",
     "customers:read",
+    "shifts:own",
     "store:read",
   ],
 };
