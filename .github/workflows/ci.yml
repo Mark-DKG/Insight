@@ -1,0 +1,62 @@
+name: CI
+
+# Runs on pull requests and on the branches that feed production.
+# Node 24 matches the Vercel project's runtime (Settings > Node.js Version).
+on:
+  pull_request:
+  push:
+    branches: [main, phase-a]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: insight
+          POSTGRES_PASSWORD: insight
+          POSTGRES_DB: insight_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U insight" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Disposable CI database only. Never a production value.
+      DATABASE_URL: postgresql://insight:insight@localhost:5432/insight_ci
+      JWT_SIGNING_SECRET: ci-only-jwt-secret-not-for-production-0123456789
+      PLATFORM_ADMIN_SECRET: ci-only-admin-secret-not-for-production-0123456789
+      BASE: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install (reproducible, from package-lock.json)
+        run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Apply migrations to the CI database
+        run: npx prisma migrate deploy
+      - name: Build
+        run: npm run build
+      - name: Start the app
+        run: |
+          nohup npm start > server.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://localhost:3000/ >/dev/null && exit 0; sleep 2; done
+          cat server.log; exit 1
+      - name: Integration tests
+        run: npm run test:integration
+      - name: Server log (on failure)
+        if: failure()
+        run: tail -n 200 server.log || true

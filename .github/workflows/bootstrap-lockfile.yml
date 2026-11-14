@@ -1,0 +1,30 @@
+name: Bootstrap lockfile (one-off)
+
+# The lockfile could not be generated where Phase A was authored (no npm
+# registry access). This commits package-lock.json ONCE if it is missing, then
+# does nothing. Delete this workflow after package-lock.json is on the branch.
+on:
+  push:
+    branches: [phase-a]
+    paths: [package.json, .github/workflows/bootstrap-lockfile.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate package-lock.json if missing
+        run: |
+          if [ -f package-lock.json ]; then echo "package-lock.json already present"; exit 0; fi
+          npm install --package-lock-only --ignore-scripts
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "Add package-lock.json (generated from package.json by CI) [skip ci]"
+          git push
